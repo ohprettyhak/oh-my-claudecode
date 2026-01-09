@@ -1150,7 +1150,177 @@ exit 0
 HOOK_EOF
 chmod +x "$CLAUDE_CONFIG_DIR/hooks/stop-continuation.sh"
 
-echo -e "${GREEN}✓ Installed 2 hook scripts${NC}"
+# Silent auto-update hook - checks and applies updates without user awareness
+cat > "$CLAUDE_CONFIG_DIR/hooks/silent-auto-update.sh" << 'HOOK_EOF'
+#!/bin/bash
+# Sisyphus Silent Auto-Update Hook
+# Runs completely in the background to check for and apply updates
+# without any user notification or interruption.
+#
+# This hook is designed to be called on UserPromptSubmit events
+# but runs asynchronously so it doesn't block the user experience.
+
+# Read stdin (JSON input from Claude Code)
+INPUT=$(cat)
+
+# Always return immediately to not block the user
+# The actual update check happens in the background
+(
+  # Configuration
+  VERSION_FILE="$HOME/.claude/.sisyphus-version.json"
+  STATE_FILE="$HOME/.claude/.sisyphus-silent-update.json"
+  LOG_FILE="$HOME/.claude/.sisyphus-update.log"
+  CHECK_INTERVAL_HOURS=24
+  REPO_URL="https://raw.githubusercontent.com/Yeachan-Heo/oh-my-claude-sisyphus/main"
+
+  # Log function (silent - only to file)
+  log() {
+    echo "[$(date -Iseconds)] $1" >> "$LOG_FILE" 2>/dev/null
+  }
+
+  # Check if we should check for updates (rate limiting)
+  should_check() {
+    if [ ! -f "$VERSION_FILE" ]; then
+      return 0  # No version file - should check
+    fi
+
+    local last_check=""
+    if [ -f "$STATE_FILE" ]; then
+      last_check=$(cat "$STATE_FILE" 2>/dev/null | grep -o '"lastAttempt"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+    fi
+
+    if [ -z "$last_check" ]; then
+      return 0  # No last check time - should check
+    fi
+
+    # Calculate hours since last check
+    local last_check_epoch=$(date -d "$last_check" +%s 2>/dev/null || echo 0)
+    local now_epoch=$(date +%s)
+    local diff_hours=$(( (now_epoch - last_check_epoch) / 3600 ))
+
+    if [ "$diff_hours" -ge "$CHECK_INTERVAL_HOURS" ]; then
+      return 0  # Enough time has passed
+    fi
+
+    return 1  # Too soon to check
+  }
+
+  # Get current installed version
+  get_current_version() {
+    if [ -f "$VERSION_FILE" ]; then
+      cat "$VERSION_FILE" 2>/dev/null | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/'
+    else
+      echo ""
+    fi
+  }
+
+  # Fetch latest version from GitHub
+  get_latest_version() {
+    local pkg_json
+    pkg_json=$(curl -fsSL --connect-timeout 5 --max-time 10 "$REPO_URL/package.json" 2>/dev/null)
+    if [ $? -eq 0 ]; then
+      echo "$pkg_json" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/'
+    else
+      echo ""
+    fi
+  }
+
+  # Compare semantic versions (returns 0 if first < second)
+  version_lt() {
+    [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ] && [ "$1" != "$2" ]
+  }
+
+  # Update state file
+  update_state() {
+    local now=$(date -Iseconds)
+    cat > "$STATE_FILE" << EOF
+{
+  "lastAttempt": "$now",
+  "lastSuccess": "${1:-}",
+  "consecutiveFailures": ${2:-0},
+  "pendingRestart": ${3:-false},
+  "lastVersion": "${4:-}"
+}
+EOF
+  }
+
+  # Perform silent update
+  do_update() {
+    log "Downloading install script..."
+
+    local temp_script=$(mktemp)
+    if curl -fsSL --connect-timeout 10 --max-time 60 "$REPO_URL/scripts/install.sh" -o "$temp_script" 2>/dev/null; then
+      chmod +x "$temp_script"
+
+      log "Running install script..."
+      # Run silently, redirect all output to log
+      bash "$temp_script" >> "$LOG_FILE" 2>&1
+      local result=$?
+
+      rm -f "$temp_script"
+
+      if [ $result -eq 0 ]; then
+        log "Update completed successfully"
+        return 0
+      else
+        log "Install script failed with exit code $result"
+        return 1
+      fi
+    else
+      log "Failed to download install script"
+      rm -f "$temp_script" 2>/dev/null
+      return 1
+    fi
+  }
+
+  # Main logic
+  main() {
+    # Check rate limiting
+    if ! should_check; then
+      exit 0
+    fi
+
+    log "Starting silent update check..."
+
+    local current_version=$(get_current_version)
+    local latest_version=$(get_latest_version)
+
+    if [ -z "$latest_version" ]; then
+      log "Failed to fetch latest version"
+      update_state "" 1 false ""
+      exit 1
+    fi
+
+    log "Current: $current_version, Latest: $latest_version"
+
+    if [ -z "$current_version" ] || version_lt "$current_version" "$latest_version"; then
+      log "Update available: $current_version -> $latest_version"
+
+      if do_update; then
+        local now=$(date -Iseconds)
+        update_state "$now" 0 true "$latest_version"
+        log "Silent update to $latest_version completed"
+      else
+        update_state "" 1 false ""
+        log "Silent update failed"
+      fi
+    else
+      log "Already up to date ($current_version)"
+      update_state "" 0 false ""
+    fi
+  }
+
+  # Run in background, completely detached
+  main
+) </dev/null >/dev/null 2>&1 &
+
+# Return success immediately (don't block)
+echo '{"continue": true}'
+exit 0
+HOOK_EOF
+chmod +x "$CLAUDE_CONFIG_DIR/hooks/silent-auto-update.sh"
+
+echo -e "${GREEN}✓ Installed 3 hook scripts${NC}"
 
 echo -e "${BLUE}[7/8]${NC} Configuring hooks in settings.json..."
 
@@ -1178,6 +1348,10 @@ if command -v jq &> /dev/null; then
             {
               "type": "command",
               "command": "bash $HOME/.claude/hooks/keyword-detector.sh"
+            },
+            {
+              "type": "command",
+              "command": "bash $HOME/.claude/hooks/silent-auto-update.sh"
             }
           ]
         }
@@ -1213,6 +1387,10 @@ else
           {
             "type": "command",
             "command": "bash $HOME/.claude/hooks/keyword-detector.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash $HOME/.claude/hooks/silent-auto-update.sh"
           }
         ]
       }
@@ -1246,7 +1424,7 @@ SETTINGS_EOF
       # No hooks section - try to add it before the last closing brace
       # Create temp file with hooks added
       HOOKS_JSON='"hooks": {
-    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "bash $HOME/.claude/hooks/keyword-detector.sh"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "bash $HOME/.claude/hooks/keyword-detector.sh"}, {"type": "command", "command": "bash $HOME/.claude/hooks/silent-auto-update.sh"}]}],
     "Stop": [{"hooks": [{"type": "command", "command": "bash $HOME/.claude/hooks/stop-continuation.sh"}]}]
   }'
       # Use sed to insert before the last }
@@ -1359,7 +1537,7 @@ else
 fi
 
 # Save version metadata for auto-update system
-VERSION="1.4.1"
+VERSION="1.5.0"
 VERSION_FILE="$CLAUDE_CONFIG_DIR/.sisyphus-version.json"
 
 cat > "$VERSION_FILE" << VERSION_EOF

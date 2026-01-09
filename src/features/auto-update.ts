@@ -417,3 +417,214 @@ export async function interactiveUpdate(): Promise<void> {
     process.exit(1);
   }
 }
+
+/**
+ * Silent auto-update configuration
+ */
+export interface SilentUpdateConfig {
+  /** Minimum hours between update checks (default: 24) */
+  checkIntervalHours?: number;
+  /** Whether to auto-apply updates without confirmation (default: true) */
+  autoApply?: boolean;
+  /** Log file path for silent update activity (optional) */
+  logFile?: string;
+  /** Maximum retries on failure (default: 3) */
+  maxRetries?: number;
+}
+
+/** State file for tracking silent update status */
+const SILENT_UPDATE_STATE_FILE = join(CLAUDE_CONFIG_DIR, '.sisyphus-silent-update.json');
+
+interface SilentUpdateState {
+  lastAttempt?: string;
+  lastSuccess?: string;
+  consecutiveFailures: number;
+  pendingRestart: boolean;
+  lastVersion?: string;
+}
+
+/**
+ * Read silent update state
+ */
+function getSilentUpdateState(): SilentUpdateState {
+  if (!existsSync(SILENT_UPDATE_STATE_FILE)) {
+    return { consecutiveFailures: 0, pendingRestart: false };
+  }
+  try {
+    return JSON.parse(readFileSync(SILENT_UPDATE_STATE_FILE, 'utf-8'));
+  } catch {
+    return { consecutiveFailures: 0, pendingRestart: false };
+  }
+}
+
+/**
+ * Save silent update state
+ */
+function saveSilentUpdateState(state: SilentUpdateState): void {
+  const dir = dirname(SILENT_UPDATE_STATE_FILE);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(SILENT_UPDATE_STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+/**
+ * Log message to silent update log file (if configured)
+ */
+function silentLog(message: string, logFile?: string): void {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}\n`;
+
+  if (logFile) {
+    try {
+      const dir = dirname(logFile);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(logFile, logMessage, { flag: 'a' });
+    } catch {
+      // Silently ignore log errors
+    }
+  }
+}
+
+/**
+ * Perform a completely silent update check and installation
+ *
+ * This function runs without any user interaction or console output.
+ * It's designed to be called from hooks or startup scripts to keep
+ * the system updated automatically without user awareness.
+ *
+ * Features:
+ * - Rate-limited to prevent excessive checks
+ * - Exponential backoff on failures
+ * - Optional logging to file for debugging
+ * - Tracks pending restart state
+ *
+ * @param config - Silent update configuration
+ * @returns Promise resolving to update result or null if skipped
+ */
+export async function silentAutoUpdate(config: SilentUpdateConfig = {}): Promise<UpdateResult | null> {
+  const {
+    checkIntervalHours = 24,
+    autoApply = true,
+    logFile = join(CLAUDE_CONFIG_DIR, '.sisyphus-update.log'),
+    maxRetries = 3
+  } = config;
+
+  const state = getSilentUpdateState();
+
+  // Check rate limiting
+  if (!shouldCheckForUpdates(checkIntervalHours)) {
+    return null;
+  }
+
+  // Check for consecutive failures and apply exponential backoff
+  if (state.consecutiveFailures >= maxRetries) {
+    const backoffHours = Math.min(24 * state.consecutiveFailures, 168); // Max 1 week
+    const lastAttempt = state.lastAttempt ? new Date(state.lastAttempt).getTime() : 0;
+    const hoursSinceLastAttempt = (Date.now() - lastAttempt) / (1000 * 60 * 60);
+
+    if (hoursSinceLastAttempt < backoffHours) {
+      silentLog(`Skipping update check (in backoff period: ${backoffHours}h)`, logFile);
+      return null;
+    }
+  }
+
+  silentLog('Starting silent update check...', logFile);
+  state.lastAttempt = new Date().toISOString();
+
+  try {
+    // Check for updates
+    const checkResult = await checkForUpdates();
+
+    if (!checkResult.updateAvailable) {
+      silentLog(`No update available (current: ${checkResult.currentVersion})`, logFile);
+      state.consecutiveFailures = 0;
+      state.pendingRestart = false;
+      saveSilentUpdateState(state);
+      return null;
+    }
+
+    silentLog(`Update available: ${checkResult.currentVersion} -> ${checkResult.latestVersion}`, logFile);
+
+    if (!autoApply) {
+      silentLog('Auto-apply disabled, skipping installation', logFile);
+      return null;
+    }
+
+    // Perform the update silently
+    const result = await performUpdate({
+      skipConfirmation: true,
+      verbose: false
+    });
+
+    if (result.success) {
+      silentLog(`Update successful: ${result.previousVersion} -> ${result.newVersion}`, logFile);
+      state.consecutiveFailures = 0;
+      state.pendingRestart = true;
+      state.lastSuccess = new Date().toISOString();
+      state.lastVersion = result.newVersion;
+      saveSilentUpdateState(state);
+      return result;
+    } else {
+      silentLog(`Update failed: ${result.message}`, logFile);
+      state.consecutiveFailures++;
+      saveSilentUpdateState(state);
+      return result;
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    silentLog(`Update check error: ${errorMessage}`, logFile);
+    state.consecutiveFailures++;
+    saveSilentUpdateState(state);
+    return {
+      success: false,
+      previousVersion: null,
+      newVersion: 'unknown',
+      message: `Silent update failed: ${errorMessage}`,
+      errors: [errorMessage]
+    };
+  }
+}
+
+/**
+ * Check if there's a pending restart after a silent update
+ */
+export function hasPendingUpdateRestart(): boolean {
+  const state = getSilentUpdateState();
+  return state.pendingRestart;
+}
+
+/**
+ * Clear the pending restart flag (call after notifying user or restart)
+ */
+export function clearPendingUpdateRestart(): void {
+  const state = getSilentUpdateState();
+  state.pendingRestart = false;
+  saveSilentUpdateState(state);
+}
+
+/**
+ * Get the version that was silently updated to (if pending restart)
+ */
+export function getPendingUpdateVersion(): string | null {
+  const state = getSilentUpdateState();
+  return state.pendingRestart ? (state.lastVersion ?? null) : null;
+}
+
+/**
+ * Initialize silent auto-update on startup
+ *
+ * This is the main entry point for the silent update system.
+ * Call this function once when the application starts or from a hook.
+ * It runs the update check completely in the background without blocking.
+ *
+ * @param config - Silent update configuration
+ */
+export function initSilentAutoUpdate(config: SilentUpdateConfig = {}): void {
+  // Run update check in background without blocking
+  silentAutoUpdate(config).catch(() => {
+    // Silently ignore any errors - they're already logged
+  });
+}

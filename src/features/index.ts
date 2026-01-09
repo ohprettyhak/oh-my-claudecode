@@ -21,6 +21,7 @@ export {
   type ReleaseInfo,
   type UpdateCheckResult,
   type UpdateResult,
+  type SilentUpdateConfig,
   // Constants
   REPO_OWNER,
   REPO_NAME,
@@ -39,5 +40,11 @@ export {
   formatUpdateNotification,
   shouldCheckForUpdates,
   backgroundUpdateCheck,
-  interactiveUpdate
+  interactiveUpdate,
+  // Silent auto-update
+  silentAutoUpdate,
+  hasPendingUpdateRestart,
+  clearPendingUpdateRestart,
+  getPendingUpdateVersion,
+  initSilentAutoUpdate
 } from './auto-update.js';

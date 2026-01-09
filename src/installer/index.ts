@@ -24,7 +24,7 @@ export const SETTINGS_FILE = join(CLAUDE_CONFIG_DIR, 'settings.json');
 export const VERSION_FILE = join(CLAUDE_CONFIG_DIR, '.sisyphus-version.json');
 
 /** Current version */
-export const VERSION = '1.4.1';
+export const VERSION = '1.5.0';
 
 /** Installation result */
 export interface InstallResult {
