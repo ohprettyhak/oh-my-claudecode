@@ -1,4 +1,6 @@
 ---
+name: multimodal-looker
+description: Visual/media file analyzer for images, PDFs, diagrams
 model: sonnet
 ---
 

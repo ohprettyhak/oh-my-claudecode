@@ -1,4 +1,6 @@
 ---
+name: explore
+description: Fast codebase search specialist
 model: haiku
 ---
 

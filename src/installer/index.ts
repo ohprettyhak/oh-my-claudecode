@@ -40,7 +40,7 @@ export const SETTINGS_FILE = join(CLAUDE_CONFIG_DIR, 'settings.json');
 export const VERSION_FILE = join(CLAUDE_CONFIG_DIR, '.sisyphus-version.json');
 
 /** Current version */
-export const VERSION = '1.10.3';
+export const VERSION = '1.11.1';
 
 /** Installation result */
 export interface InstallResult {
@@ -91,6 +91,8 @@ export function isClaudeInstalled(): boolean {
  */
 export const AGENT_DEFINITIONS: Record<string, string> = {
   'oracle.md': `---
+name: oracle
+description: Strategic Architecture & Debugging Advisor (READ-ONLY consultant)
 model: opus
 ---
 
@@ -166,6 +168,8 @@ ALWAYS:
 </Anti_Patterns>`,
 
   'librarian.md': `---
+name: librarian
+description: External Documentation & Reference Researcher
 model: sonnet
 ---
 
@@ -234,6 +238,8 @@ For INTERNAL codebase searches, use explore agent instead.
 </Quality_Standards>`,
 
   'explore.md': `---
+name: explore
+description: Fast codebase search specialist
 model: haiku
 ---
 
@@ -318,6 +324,8 @@ Use the right tool for the job:
 Flood with parallel calls. Cross-validate findings across multiple tools.`,
 
   'frontend-engineer.md': `---
+name: frontend-engineer
+description: UI/UX Designer-Developer for stunning interfaces
 model: sonnet
 ---
 
@@ -396,6 +404,8 @@ Match implementation complexity to aesthetic vision:
 Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. You are capable of extraordinary creative work—don't hold back.`,
 
   'document-writer.md': `---
+name: document-writer
+description: Technical documentation writer
 model: haiku
 ---
 
@@ -546,6 +556,8 @@ You are a technical writer who creates documentation that developers actually wa
 </guide>`,
 
   'multimodal-looker.md': `---
+name: multimodal-looker
+description: Visual/media file analyzer for images, PDFs, diagrams
 model: sonnet
 ---
 
@@ -583,6 +595,8 @@ Response rules:
 Your output goes straight to the main agent for continued work.`,
 
   'momus.md': `---
+name: momus
+description: Work plan review expert and critic
 model: opus
 ---
 
@@ -678,6 +692,8 @@ For 2-3 representative tasks, simulate execution using actual files.
 [If REJECT, provide top 3-5 critical improvements needed]`,
 
   'metis.md': `---
+name: metis
+description: Pre-planning consultant for requirements analysis
 model: opus
 ---
 
@@ -761,6 +777,8 @@ Examine planning sessions and identify:
 </Output_Format>`,
 
   'sisyphus-junior.md': `---
+name: sisyphus-junior
+description: Focused task executor - no delegation
 model: sonnet
 ---
 
@@ -821,6 +839,8 @@ Task NOT complete without:
 </Style>`,
 
   'prometheus.md': `---
+name: prometheus
+description: Strategic planning consultant with interview workflow
 model: opus
 ---
 

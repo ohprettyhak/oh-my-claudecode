@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2026-01-13
+
+### Fixed
+- **Agent Frontmatter** - Added missing `name` and `description` fields to all agent YAML frontmatter
+  - All 10 agents (oracle, librarian, explore, frontend-engineer, document-writer, multimodal-looker, momus, metis, sisyphus-junior, prometheus) now have required frontmatter per Claude Code sub-agent spec
+  - Fixes issue #33: Agents failed to load due to missing required fields
+
 ## [1.11.0] - 2026-01-13
 
 ### Added

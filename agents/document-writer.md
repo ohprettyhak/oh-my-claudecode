@@ -1,4 +1,6 @@
 ---
+name: document-writer
+description: Technical documentation writer
 model: haiku
 ---
 
