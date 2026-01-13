@@ -18,6 +18,5 @@
     "delegation",
     "todo-management",
     "productivity"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }
