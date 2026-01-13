@@ -10,7 +10,7 @@
     {
       "name": "oh-my-claude-sisyphus",
       "description": "Multi-agent orchestration system for Claude Code with 11 specialized agents, 12 slash commands, and 6 skills. Like Sisyphus, the agents persist until every task is complete.",
-      "version": "1.10.3",
+      "version": "1.11.1",
       "author": {
         "name": "Yeachan Heo",
         "email": "hurrc04@gmail.com"
