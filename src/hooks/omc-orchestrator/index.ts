@@ -8,10 +8,13 @@
  * Adapted from oh-my-opencode's omc-orchestrator hook for shell-based hooks.
  */
 
+import * as path from 'path';
 import { execSync } from 'child_process';
 import {
   HOOK_NAME,
   ALLOWED_PATH_PREFIX,
+  ALLOWED_PATH_PATTERNS,
+  WARNED_EXTENSIONS,
   WRITE_EDIT_TOOLS,
   DIRECT_WORK_REMINDER,
   ORCHESTRATOR_DELEGATION_REQUIRED,
@@ -27,6 +30,7 @@ import {
   addWorkingMemoryEntry,
   setPriorityContext,
 } from '../notepad/index.js';
+import { logAuditEntry } from './audit.js';
 
 // Re-export constants
 export * from './constants.js';
@@ -65,7 +69,17 @@ interface GitFileStat {
  */
 export function isAllowedPath(filePath: string): boolean {
   if (!filePath) return true;
-  return filePath.includes(ALLOWED_PATH_PREFIX);
+  // Check against all allowed patterns
+  return ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(filePath));
+}
+
+/**
+ * Check if a file path is a source file that should trigger delegation warning
+ */
+export function isSourceFile(filePath: string): boolean {
+  if (!filePath) return false;
+  const ext = path.extname(filePath).toLowerCase();
+  return WARNED_EXTENSIONS.includes(ext);
 }
 
 /**
@@ -251,7 +265,7 @@ function processRememberTags(output: string, directory: string): void {
  * Returns warning message if orchestrator tries to modify non-allowed paths
  */
 export function processOrchestratorPreTool(input: ToolExecuteInput): ToolExecuteOutput {
-  const { toolName, toolInput } = input;
+  const { toolName, toolInput, sessionId } = input;
 
   // Only check write/edit tools
   if (!isWriteEditTool(toolName)) {
@@ -263,8 +277,28 @@ export function processOrchestratorPreTool(input: ToolExecuteInput): ToolExecute
 
   // Allow if path is in allowed prefix
   if (!filePath || isAllowedPath(filePath)) {
+    // Log allowed operation
+    if (filePath) {
+      logAuditEntry({
+        tool: toolName,
+        filePath,
+        decision: 'allowed',
+        reason: 'allowed_path',
+        sessionId,
+      });
+    }
     return { continue: true };
   }
+
+  // Log warned operation
+  const isSource = isSourceFile(filePath);
+  logAuditEntry({
+    tool: toolName,
+    filePath,
+    decision: 'warned',
+    reason: isSource ? 'source_file' : 'other',
+    sessionId,
+  });
 
   // Inject warning for non-allowed path modifications
   const warning = ORCHESTRATOR_DELEGATION_REQUIRED.replace('$FILE_PATH', filePath);

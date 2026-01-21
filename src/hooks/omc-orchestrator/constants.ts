@@ -8,8 +8,44 @@
 
 export const HOOK_NAME = 'omc-orchestrator';
 
-/** Paths that orchestrator IS allowed to modify directly */
+/** @deprecated Use ALLOWED_PATH_PATTERNS instead. Legacy single prefix. */
 export const ALLOWED_PATH_PREFIX = '.omc/';
+
+/** Path patterns that orchestrator IS allowed to modify directly */
+export const ALLOWED_PATH_PATTERNS = [
+  /^\.omc\//,                    // .omc/**
+  /^\.claude\//,                 // .claude/** (local)
+  /^~?\/\.claude\//,             // ~/.claude/** (global)
+  /\/\.claude\//,                // any /.claude/ path
+  /CLAUDE\.md$/,                 // **/CLAUDE.md
+  /AGENTS\.md$/,                 // **/AGENTS.md
+];
+
+/** Source file extensions that should trigger delegation warnings */
+export const WARNED_EXTENSIONS = [
+  // JavaScript/TypeScript
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  // Python
+  '.py', '.pyw',
+  // Go
+  '.go',
+  // Rust
+  '.rs',
+  // Java/JVM
+  '.java', '.kt', '.scala',
+  // C/C++
+  '.c', '.cpp', '.cc', '.h', '.hpp',
+  // Ruby
+  '.rb',
+  // PHP
+  '.php',
+  // Frontend frameworks
+  '.svelte', '.vue',
+  // GraphQL
+  '.graphql', '.gql',
+  // Shell
+  '.sh', '.bash', '.zsh',
+];
 
 /** Tools that perform file modifications */
 export const WRITE_EDIT_TOOLS = ['Write', 'Edit', 'write', 'edit'];
@@ -67,6 +103,8 @@ As an ORCHESTRATOR, you MUST:
 
 **ALLOWED direct file operations:**
 - Files inside \`.omc/\` (plans, notepads, drafts)
+- Files inside \`~/.claude/\` (global config)
+- \`CLAUDE.md\` and \`AGENTS.md\` files
 - Reading files for verification
 - Running diagnostics/tests
 

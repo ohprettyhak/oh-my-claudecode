@@ -154,7 +154,7 @@ grep -r "<!-- Parent:" --include="AGENTS.md" .
 | Directory mapping | `explore` |
 | File analysis | `architect-low` |
 | Content generation | `writer` |
-| Multi-file writes | `executor` |
+| AGENTS.md writes | `writer` |
 
 ## Empty Directory Handling
 

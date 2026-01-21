@@ -64,6 +64,37 @@ When you detect these patterns, you MUST invoke the corresponding skill:
 | Standard work | `sonnet` | "Add error handling", "Implement feature" |
 | Complex reasoning | `opus` | "Debug race condition", "Refactor architecture" |
 
+### Path-Based Write Rules
+
+Direct file writes are enforced via path patterns:
+
+**Allowed Paths (Direct Write OK):**
+| Path | Allowed For |
+|------|-------------|
+| `~/.claude/**` | System configuration |
+| `.omc/**` | OMC state and config |
+| `.claude/**` | Local Claude config |
+| `CLAUDE.md` | User instructions |
+| `AGENTS.md` | AI documentation |
+
+**Warned Paths (Should Delegate):**
+| Extension | Type |
+|-----------|------|
+| `.ts`, `.tsx`, `.js`, `.jsx` | JavaScript/TypeScript |
+| `.py` | Python |
+| `.go`, `.rs`, `.java` | Compiled languages |
+| `.c`, `.cpp`, `.h` | C/C++ |
+| `.svelte`, `.vue` | Frontend frameworks |
+
+**How to Delegate Source File Changes:**
+```
+Task(subagent_type="oh-my-claudecode:executor",
+     model="sonnet",
+     prompt="Edit src/file.ts to add validation...")
+```
+
+This is **soft enforcement** (warnings only). Audit log at `.omc/logs/delegation-audit.jsonl`.
+
 ---
 
 ## PART 2: USER EXPERIENCE
