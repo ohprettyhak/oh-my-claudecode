@@ -13,6 +13,19 @@ const outfile = 'bridge/mcp-server.cjs';
 // Ensure output directory exists
 await mkdir('bridge', { recursive: true });
 
+// Preamble: resolve global npm modules so externalized native packages
+// (like @ast-grep/napi) can be found when running from plugin cache
+const banner = `
+// Resolve global npm modules for native package imports
+try {
+  var _cp = require('child_process');
+  var _globalRoot = _cp.execSync('npm root -g', { encoding: 'utf8' }).trim();
+  if (_globalRoot && !require('module').globalPaths.includes(_globalRoot)) {
+    require('module').globalPaths.push(_globalRoot);
+  }
+} catch (_e) { /* npm not available - native modules will gracefully degrade */ }
+`;
+
 await esbuild.build({
   entryPoints: ['src/mcp/standalone-server.ts'],
   bundle: true,
@@ -20,6 +33,7 @@ await esbuild.build({
   target: 'node18',
   format: 'cjs',
   outfile,
+  banner: { js: banner },
   // Externalize Node.js built-ins and native modules
   external: [
     'fs', 'path', 'os', 'util', 'stream', 'events',
