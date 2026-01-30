@@ -9,6 +9,26 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { isOmcHook, install, InstallOptions } from '../index.js';
 
+/**
+ * Detect hook conflicts using the real isOmcHook function.
+ * Mirrors the install() logic to avoid test duplication.
+ */
+function detectConflicts(
+  hooks: Record<string, Array<{ hooks: Array<{ type: string; command: string }> }>>
+): Array<{ eventType: string; existingCommand: string }> {
+  const conflicts: Array<{ eventType: string; existingCommand: string }> = [];
+  for (const [eventType, eventHooks] of Object.entries(hooks)) {
+    for (const hookGroup of eventHooks) {
+      for (const hook of hookGroup.hooks) {
+        if (hook.type === 'command' && !isOmcHook(hook.command)) {
+          conflicts.push({ eventType, existingCommand: hook.command });
+        }
+      }
+    }
+  }
+  return conflicts;
+}
+
 const TEST_CLAUDE_DIR = join(homedir(), '.claude-test-safe-installer');
 const TEST_SETTINGS_FILE = join(TEST_CLAUDE_DIR, 'settings.json');
 
@@ -33,6 +53,27 @@ describe('isOmcHook', () => {
   it('is case-insensitive', () => {
     expect(isOmcHook('node ~/.claude/hooks/OMC-hook.mjs')).toBe(true);
     expect(isOmcHook('bash $HOME/.claude/hooks/OH-MY-CLAUDECODE.sh')).toBe(true);
+  });
+});
+
+describe('isOmcHook detection', () => {
+  it('detects real OMC hooks correctly', () => {
+    expect(isOmcHook('node ~/.claude/hooks/omc-hook.mjs')).toBe(true);
+    expect(isOmcHook('node ~/.claude/hooks/oh-my-claudecode-hook.mjs')).toBe(true);
+    expect(isOmcHook('node ~/.claude/hooks/omc-pre-tool-use.mjs')).toBe(true);
+    expect(isOmcHook('/usr/local/bin/omc')).toBe(true);
+  });
+
+  it('rejects non-OMC hooks correctly', () => {
+    expect(isOmcHook('eslint --fix')).toBe(false);
+    expect(isOmcHook('prettier --write')).toBe(false);
+    expect(isOmcHook('node custom-hook.mjs')).toBe(false);
+    expect(isOmcHook('node ~/.claude/hooks/beads-hook.mjs')).toBe(false);
+  });
+
+  it('uses case-insensitive matching', () => {
+    expect(isOmcHook('node ~/.claude/hooks/OMC-hook.mjs')).toBe(true);
+    expect(isOmcHook('OH-MY-CLAUDECODE-detector.sh')).toBe(true);
   });
 });
 
@@ -81,29 +122,7 @@ describe('Safe Installer - Hook Conflict Detection', () => {
 
     // Simulate install logic (we'd need to mock or refactor install function for full test)
     // For now, test the detection logic directly
-    const existingHooks = existingSettings.hooks;
-    const conflicts: Array<{ eventType: string; existingCommand: string }> = [];
-
-    for (const [eventType, eventHooks] of Object.entries(existingHooks)) {
-      const existingEventHooks = eventHooks as Array<{ hooks: Array<{ type: string; command: string }> }>;
-      let hasNonOmcHook = false;
-      let nonOmcCommand = '';
-
-      for (const hookGroup of existingEventHooks) {
-        for (const hook of hookGroup.hooks) {
-          if (hook.type === 'command' && !isOmcHook(hook.command)) {
-            hasNonOmcHook = true;
-            nonOmcCommand = hook.command;
-            break;
-          }
-        }
-        if (hasNonOmcHook) break;
-      }
-
-      if (hasNonOmcHook) {
-        conflicts.push({ eventType, existingCommand: nonOmcCommand });
-      }
-    }
+    const conflicts = detectConflicts(existingSettings.hooks);
 
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0].eventType).toBe('PreToolUse');
@@ -126,29 +145,7 @@ describe('Safe Installer - Hook Conflict Detection', () => {
       }
     };
 
-    const existingHooks = existingSettings.hooks;
-    const conflicts: Array<{ eventType: string; existingCommand: string }> = [];
-
-    for (const [eventType, eventHooks] of Object.entries(existingHooks)) {
-      const existingEventHooks = eventHooks as Array<{ hooks: Array<{ type: string; command: string }> }>;
-      let hasNonOmcHook = false;
-      let nonOmcCommand = '';
-
-      for (const hookGroup of existingEventHooks) {
-        for (const hook of hookGroup.hooks) {
-          if (hook.type === 'command' && !isOmcHook(hook.command)) {
-            hasNonOmcHook = true;
-            nonOmcCommand = hook.command;
-            break;
-          }
-        }
-        if (hasNonOmcHook) break;
-      }
-
-      if (hasNonOmcHook) {
-        conflicts.push({ eventType, existingCommand: nonOmcCommand });
-      }
-    }
+    const conflicts = detectConflicts(existingSettings.hooks);
 
     expect(conflicts).toHaveLength(0);
   });
@@ -189,29 +186,7 @@ describe('Safe Installer - Hook Conflict Detection', () => {
       }
     };
 
-    const existingHooks = existingSettings.hooks;
-    const conflicts: Array<{ eventType: string; existingCommand: string }> = [];
-
-    for (const [eventType, eventHooks] of Object.entries(existingHooks)) {
-      const existingEventHooks = eventHooks as Array<{ hooks: Array<{ type: string; command: string }> }>;
-      let hasNonOmcHook = false;
-      let nonOmcCommand = '';
-
-      for (const hookGroup of existingEventHooks) {
-        for (const hook of hookGroup.hooks) {
-          if (hook.type === 'command' && !isOmcHook(hook.command)) {
-            hasNonOmcHook = true;
-            nonOmcCommand = hook.command;
-            break;
-          }
-        }
-        if (hasNonOmcHook) break;
-      }
-
-      if (hasNonOmcHook) {
-        conflicts.push({ eventType, existingCommand: nonOmcCommand });
-      }
-    }
+    const conflicts = detectConflicts(existingSettings.hooks);
 
     expect(conflicts).toHaveLength(2);
     expect(conflicts.map(c => c.eventType)).toContain('PreToolUse');

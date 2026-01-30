@@ -161,7 +161,7 @@ if [ -f "$TARGET_PATH" ]; then
 fi
 
 # Download fresh OMC content to temp file
-TEMP_OMC="/tmp/omc-claude-$$.md"
+TEMP_OMC=$(mktemp /tmp/omc-claude-XXXXXX.md)
 curl -fsSL "https://raw.githubusercontent.com/Yeachan-Heo/oh-my-claudecode/main/docs/CLAUDE.md" -o "$TEMP_OMC"
 
 if [ ! -f "$TARGET_PATH" ]; then
@@ -191,7 +191,7 @@ else
       echo '<!-- OMC:END -->'
       echo ""
       echo "<!-- User customizations (migrated from previous CLAUDE.md) -->"
-      echo "$OLD_CONTENT"
+      printf '%s\n' "$OLD_CONTENT"
     } > "$TARGET_PATH"
     echo "Migrated existing CLAUDE.md (added OMC markers, preserved old content)"
   fi
@@ -279,7 +279,7 @@ if [ -f "$TARGET_PATH" ]; then
 fi
 
 # Download fresh OMC content to temp file
-TEMP_OMC="/tmp/omc-claude-$$.md"
+TEMP_OMC=$(mktemp /tmp/omc-claude-XXXXXX.md)
 curl -fsSL "https://raw.githubusercontent.com/Yeachan-Heo/oh-my-claudecode/main/docs/CLAUDE.md" -o "$TEMP_OMC"
 
 if [ ! -f "$TARGET_PATH" ]; then
@@ -309,7 +309,7 @@ else
       echo '<!-- OMC:END -->'
       echo ""
       echo "<!-- User customizations (migrated from previous CLAUDE.md) -->"
-      echo "$OLD_CONTENT"
+      printf '%s\n' "$OLD_CONTENT"
     } > "$TARGET_PATH"
     echo "Migrated existing CLAUDE.md (added OMC markers, preserved old content)"
   fi

@@ -43,13 +43,17 @@ export function checkHookConflicts(): ConflictReport['hookConflicts'] {
     ];
 
     for (const event of hookEvents) {
-      if (hooks[event]) {
-        const hookConfig = hooks[event];
-        const command = typeof hookConfig === 'string' ? hookConfig : hookConfig.command;
-
-        if (command) {
-          const isOmc = command.includes('omc') || command.includes('oh-my-claudecode');
-          conflicts.push({ event, command, isOmc });
+      if (hooks[event] && Array.isArray(hooks[event])) {
+        const eventHookGroups = hooks[event] as Array<{ hooks?: Array<{ type?: string; command?: string }> }>;
+        for (const group of eventHookGroups) {
+          if (!group.hooks || !Array.isArray(group.hooks)) continue;
+          for (const hook of group.hooks) {
+            if (hook.type === 'command' && hook.command) {
+              const lowerCmd = hook.command.toLowerCase();
+              const isOmc = lowerCmd.includes('omc') || lowerCmd.includes('oh-my-claudecode');
+              conflicts.push({ event, command: hook.command, isOmc });
+            }
+          }
         }
       }
     }
@@ -132,12 +136,20 @@ export function checkConfigIssues(): ConflictReport['configIssues'] {
 
     // Known top-level fields from PluginConfig type
     const knownFields = new Set([
+      // PluginConfig fields
       'agents',
       'features',
       'mcpServers',
       'permissions',
       'magicKeywords',
-      'routing'
+      'routing',
+      // SisyphusConfig fields (from auto-update.ts / omc-setup)
+      'silentAutoUpdate',
+      'configuredAt',
+      'configVersion',
+      'taskTool',
+      'taskToolConfig',
+      'defaultExecutionMode',
     ]);
 
     for (const field of Object.keys(config)) {
@@ -166,8 +178,8 @@ export function runConflictCheck(): ConflictReport {
     hookConflicts.some(h => !h.isOmc) || // Non-OMC hooks present
     envFlags.disableOmc || // OMC is disabled
     envFlags.skipHooks.length > 0 || // Hooks are being skipped
-    configIssues.unknownFields.length > 0 || // Unknown config fields
-    (claudeMdStatus !== null && !claudeMdStatus.hasMarkers); // CLAUDE.md has no markers
+    configIssues.unknownFields.length > 0; // Unknown config fields
+    // Note: Missing OMC markers is informational (normal for fresh install), not a conflict
 
   return {
     hookConflicts,

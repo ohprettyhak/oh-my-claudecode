@@ -46,6 +46,8 @@ export interface SisyphusConfig {
     /** Inject usage instructions at session start (default: true) */
     injectInstructions?: boolean;
   };
+  /** Preferred execution mode for parallel work (set by omc-setup Step 3.7) */
+  defaultExecutionMode?: 'ultrawork' | 'ecomode';
 }
 
 /**
@@ -66,6 +68,7 @@ export function getSisyphusConfig(): SisyphusConfig {
       configVersion: config.configVersion,
       taskTool: config.taskTool,
       taskToolConfig: config.taskToolConfig,
+      defaultExecutionMode: config.defaultExecutionMode,
     };
   } catch {
     // If config file is invalid, default to disabled for security

@@ -61,7 +61,15 @@ export interface InstallOptions {
 }
 
 /**
- * Check if a hook command belongs to OMC
+ * Detect whether a hook command belongs to oh-my-claudecode.
+ *
+ * Uses substring matching rather than word-boundary regex.
+ * Rationale: Real OMC hooks use compound names where "omc" is embedded
+ * (e.g., `omc-pre-tool-use.mjs`, `oh-my-claudecode-hook.mjs`). A word-boundary
+ * regex like /\bomc\b/ would fail to match "oh-my-claudecode" since "omc" appears
+ * as an interior substring. The theoretical false positives (words containing "omc"
+ * like "atomic", "socom") are extremely unlikely in real hook command paths.
+ *
  * @param command - The hook command string
  * @returns true if the command contains 'omc' or 'oh-my-claudecode'
  */
@@ -212,8 +220,7 @@ export function mergeClaudeMd(existingContent: string | null, omcContent: string
   // Case 3: Corrupted markers (START without END or vice versa)
   if (startIndex !== -1 || endIndex !== -1) {
     // Handle corrupted state - backup will be created by caller
-    // Just wrap omcContent in markers and append existing content
-    return `${START_MARKER}\n${omcContent}\n${END_MARKER}\n\n${USER_CUSTOMIZATIONS}\n${existingContent}`;
+    return `${START_MARKER}\n${omcContent}\n${END_MARKER}\n\n<!-- User customizations (recovered from corrupted markers) -->\n${existingContent}`;
   }
 
   // Case 4: No markers - wrap omcContent in markers, preserve existing after user customizations header
@@ -360,10 +367,10 @@ export function install(options: InstallOptions = {}): InstallResult {
         }
 
         // Always create backup before modification (if file exists)
-        if (existsSync(claudeMdPath)) {
+        if (existingContent !== null) {
           const timestamp = new Date().toISOString().replace(/:/g, '-').split('.')[0]; // YYYY-MM-DDTHH-MM-SS
           const backupPath = join(CLAUDE_CONFIG_DIR, `CLAUDE.md.backup.${timestamp}`);
-          writeFileSync(backupPath, existingContent!);
+          writeFileSync(backupPath, existingContent);
           log(`Backed up existing CLAUDE.md to ${backupPath}`);
         }
 

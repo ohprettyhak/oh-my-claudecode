@@ -1,19 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { processHook, type HookInput, type HookOutput } from '../bridge.js';
+import { processHook, resetSkipHooksCache, type HookInput, type HookOutput, type HookType } from '../bridge.js';
 
 describe('processHook - Environment Kill-Switches', () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    // Reset environment before each test
+    // Reset environment and cache before each test
     process.env = { ...originalEnv };
     delete process.env.DISABLE_OMC;
     delete process.env.OMC_SKIP_HOOKS;
+    resetSkipHooksCache();
   });
 
   afterEach(() => {
     // Restore original environment
     process.env = originalEnv;
+    resetSkipHooksCache();
   });
 
   describe('DISABLE_OMC flag', () => {
@@ -210,7 +212,11 @@ describe('processHook - Environment Kill-Switches', () => {
   });
 
   describe('All hook types', () => {
-    const hookTypes = [
+    // Ensure this list stays in sync with HookType.
+    // NOTE: `satisfies HookType[]` catches invalid values (typos, removed types),
+    // but does NOT enforce exhaustiveness -- if a new HookType variant is added,
+    // TypeScript will not error here until a test exercises the missing variant.
+    const hookTypes: HookType[] = [
       'keyword-detector',
       'stop-continuation',
       'ralph',
@@ -226,7 +232,7 @@ describe('processHook - Environment Kill-Switches', () => {
       'setup-init',
       'setup-maintenance',
       'permission-request'
-    ] as const;
+    ] satisfies HookType[];
 
     it('should disable all hook types when DISABLE_OMC=1', async () => {
       process.env.DISABLE_OMC = '1';

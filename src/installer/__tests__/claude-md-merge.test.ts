@@ -9,6 +9,7 @@ import { mergeClaudeMd } from '../index.js';
 const START_MARKER = '<!-- OMC:START -->';
 const END_MARKER = '<!-- OMC:END -->';
 const USER_CUSTOMIZATIONS = '<!-- User customizations -->';
+const USER_CUSTOMIZATIONS_RECOVERED = '<!-- User customizations (recovered from corrupted markers) -->';
 
 describe('mergeClaudeMd', () => {
   const omcContent = '# OMC Configuration\n\nThis is the OMC content.';
@@ -99,7 +100,7 @@ describe('mergeClaudeMd', () => {
       expect(result).toContain(START_MARKER);
       expect(result).toContain(END_MARKER);
       expect(result).toContain(omcContent);
-      expect(result).toContain(USER_CUSTOMIZATIONS);
+      expect(result).toContain(USER_CUSTOMIZATIONS_RECOVERED);
       // Original corrupted content should be preserved after user customizations
       expect(result).toContain('Some content');
     });
@@ -111,7 +112,7 @@ describe('mergeClaudeMd', () => {
       expect(result).toContain(START_MARKER);
       expect(result).toContain(END_MARKER);
       expect(result).toContain(omcContent);
-      expect(result).toContain(USER_CUSTOMIZATIONS);
+      expect(result).toContain(USER_CUSTOMIZATIONS_RECOVERED);
       // Original corrupted content should be preserved
       expect(result).toContain('Some content');
       expect(result).toContain('More content');
@@ -125,7 +126,7 @@ describe('mergeClaudeMd', () => {
       expect(result).toContain(START_MARKER);
       expect(result).toContain(END_MARKER);
       expect(result).toContain(omcContent);
-      expect(result).toContain(USER_CUSTOMIZATIONS);
+      expect(result).toContain(USER_CUSTOMIZATIONS_RECOVERED);
     });
   });
 
