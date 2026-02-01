@@ -14,6 +14,7 @@ Complete reference for oh-my-claudecode. For quick start, see the main [README.m
 - [Hooks System](#hooks-system)
 - [Magic Keywords](#magic-keywords)
 - [Platform Support](#platform-support)
+- [Performance Monitoring](#performance-monitoring)
 - [Troubleshooting](#troubleshooting)
 - [Changelog](#changelog)
 
@@ -467,6 +468,49 @@ pipeline: analyze → fix → test this bug
 | `ast_grep_replace` | ✅ Implemented | Pattern-based code transformation |
 
 > **Note**: AST tools use [@ast-grep/napi](https://ast-grep.github.io/) for structural code matching. Supports meta-variables like `$VAR` (single node) and `$$$` (multiple nodes).
+
+---
+
+## Performance Monitoring
+
+oh-my-claudecode includes comprehensive monitoring for agent performance, token usage, and debugging parallel workflows.
+
+For complete documentation, see **[Performance Monitoring Guide](./PERFORMANCE-MONITORING.md)**.
+
+### Quick Overview
+
+| Feature | Description | Access |
+|---------|-------------|--------|
+| **Agent Observatory** | Real-time agent status, efficiency, bottlenecks | HUD / API |
+| **Token Analytics** | Cost tracking, usage reports, budget warnings | `omc stats`, `omc cost` |
+| **Session Replay** | Event timeline for post-session analysis | `.omc/state/agent-replay-*.jsonl` |
+| **Intervention System** | Auto-detection of stale agents, cost overruns | Automatic |
+
+### CLI Commands
+
+```bash
+omc stats          # Current session statistics
+omc cost daily     # Daily cost report
+omc cost weekly    # Weekly cost report
+omc agents         # Agent breakdown
+omc backfill       # Import historical transcript data
+```
+
+### HUD Analytics Preset
+
+Enable detailed cost tracking in your status line:
+
+```json
+{
+  "omcHud": {
+    "preset": "analytics"
+  }
+}
+```
+
+### External Resources
+
+- **[MarginLab.ai](https://marginlab.ai)** - SWE-Bench-Pro performance tracking with statistical significance testing for detecting Claude model degradation
 
 ---
 

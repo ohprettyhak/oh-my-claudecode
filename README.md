@@ -122,6 +122,7 @@ omc wait --stop   # Disable daemon
 ## Documentation
 
 - **[Full Reference](docs/REFERENCE.md)** - Complete feature documentation
+- **[Performance Monitoring](docs/PERFORMANCE-MONITORING.md)** - Agent tracking, debugging, and optimization
 - **[Website](https://yeachan-heo.github.io/oh-my-claudecode-website)** - Interactive guides and examples
 - **[Migration Guide](docs/MIGRATION.md)** - Upgrade from v2.x
 - **[Architecture](docs/ARCHITECTURE.md)** - How it works under the hood
