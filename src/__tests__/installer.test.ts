@@ -7,6 +7,7 @@ import {
   SKILLS_DIR,
   HOOKS_DIR,
   isRunningAsPlugin,
+  isProjectScopedPlugin,
 } from '../installer/index.js';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
@@ -479,6 +480,56 @@ describe('Installer Constants', () => {
     it('should detect plugin context from environment variable', () => {
       process.env.CLAUDE_PLUGIN_ROOT = '/any/path';
       expect(isRunningAsPlugin()).toBe(true);
+    });
+  });
+
+  describe('Project-Scoped Plugin Detection', () => {
+    let originalEnv: string | undefined;
+
+    beforeEach(() => {
+      originalEnv = process.env.CLAUDE_PLUGIN_ROOT;
+    });
+
+    afterEach(() => {
+      if (originalEnv !== undefined) {
+        process.env.CLAUDE_PLUGIN_ROOT = originalEnv;
+      } else {
+        delete process.env.CLAUDE_PLUGIN_ROOT;
+      }
+    });
+
+    it('should return false when CLAUDE_PLUGIN_ROOT is not set', () => {
+      delete process.env.CLAUDE_PLUGIN_ROOT;
+      expect(isProjectScopedPlugin()).toBe(false);
+    });
+
+    it('should return false for global plugin installation', () => {
+      // Global plugins are under ~/.claude/plugins/
+      process.env.CLAUDE_PLUGIN_ROOT = join(homedir(), '.claude', 'plugins', 'cache', 'omc', 'oh-my-claudecode', '3.9.0');
+      expect(isProjectScopedPlugin()).toBe(false);
+    });
+
+    it('should return true for project-scoped plugin installation', () => {
+      // Project-scoped plugins are in the project's .claude/plugins/ directory
+      process.env.CLAUDE_PLUGIN_ROOT = '/home/user/myproject/.claude/plugins/oh-my-claudecode';
+      expect(isProjectScopedPlugin()).toBe(true);
+    });
+
+    it('should return true when plugin is outside global plugin directory', () => {
+      // Any path that's not under ~/.claude/plugins/ is considered project-scoped
+      process.env.CLAUDE_PLUGIN_ROOT = '/var/projects/app/.claude/plugins/omc';
+      expect(isProjectScopedPlugin()).toBe(true);
+    });
+
+    it('should handle Windows-style paths', () => {
+      // Windows paths with backslashes should be normalized
+      process.env.CLAUDE_PLUGIN_ROOT = 'C:\\Users\\user\\project\\.claude\\plugins\\omc';
+      expect(isProjectScopedPlugin()).toBe(true);
+    });
+
+    it('should handle trailing slashes in paths', () => {
+      process.env.CLAUDE_PLUGIN_ROOT = join(homedir(), '.claude', 'plugins', 'cache', 'omc') + '/';
+      expect(isProjectScopedPlugin()).toBe(false);
     });
   });
 

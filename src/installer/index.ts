@@ -155,6 +155,34 @@ export function isRunningAsPlugin(): boolean {
 }
 
 /**
+ * Check if we're running as a project-scoped plugin (not global)
+ *
+ * Project-scoped plugins are installed in the project's .claude/plugins/ directory,
+ * while global plugins are installed in ~/.claude/plugins/.
+ *
+ * When project-scoped, we should NOT modify global settings (like ~/.claude/settings.json)
+ * because the user explicitly chose project-level installation.
+ *
+ * @returns true if running as a project-scoped plugin, false otherwise
+ */
+export function isProjectScopedPlugin(): boolean {
+  const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+  if (!pluginRoot) {
+    return false;
+  }
+
+  // Global plugins are installed under ~/.claude/plugins/
+  const globalPluginBase = join(homedir(), '.claude', 'plugins');
+
+  // If the plugin root is NOT under the global plugin directory, it's project-scoped
+  // Normalize paths for comparison (resolve symlinks, trailing slashes, etc.)
+  const normalizedPluginRoot = pluginRoot.replace(/\\/g, '/').replace(/\/$/, '');
+  const normalizedGlobalBase = globalPluginBase.replace(/\\/g, '/').replace(/\/$/, '');
+
+  return !normalizedPluginRoot.startsWith(normalizedGlobalBase);
+}
+
+/**
  * Get the package root directory
  * From dist/installer/index.js, go up to package root
  */
@@ -306,11 +334,16 @@ export function install(options: InstallOptions = {}): InstallResult {
 
   // Check if running as a plugin
   const runningAsPlugin = isRunningAsPlugin();
+  const projectScoped = isProjectScopedPlugin();
   if (runningAsPlugin) {
     log('Detected Claude Code plugin context - skipping agent/command file installation');
     log('Plugin files are managed by Claude Code plugin system');
-    log('Will still install HUD statusline...');
-    // Don't return early - continue to install HUD
+    if (projectScoped) {
+      log('Detected project-scoped plugin - skipping global HUD/settings modifications');
+    } else {
+      log('Will still install HUD statusline...');
+    }
+    // Don't return early - continue to install HUD (unless project-scoped)
   }
 
   // Check Claude installation (optional)
@@ -325,8 +358,8 @@ export function install(options: InstallOptions = {}): InstallResult {
   }
 
   try {
-    // Ensure base config directory exists
-    if (!existsSync(CLAUDE_CONFIG_DIR)) {
+    // Ensure base config directory exists (skip for project-scoped plugins)
+    if (!projectScoped && !existsSync(CLAUDE_CONFIG_DIR)) {
       mkdirSync(CLAUDE_CONFIG_DIR, { recursive: true });
     }
 
@@ -461,10 +494,15 @@ export function install(options: InstallOptions = {}): InstallResult {
       log('Skipping agent/command/hook files (managed by plugin system)');
     }
 
-    // Install HUD statusline (always, even in plugin mode)
-    log('Installing HUD statusline...');
+    // Install HUD statusline (skip for project-scoped plugins to avoid affecting global settings)
+    // Project-scoped plugins should not modify ~/.claude/settings.json
     let hudScriptPath: string | null = null;
-    try {
+    if (projectScoped) {
+      log('Skipping HUD statusline (project-scoped plugin should not modify global settings)');
+    } else {
+      log('Installing HUD statusline...');
+    }
+    if (!projectScoped) try {
       if (!existsSync(HUD_DIR)) {
         mkdirSync(HUD_DIR, { recursive: true });
       }
@@ -564,8 +602,13 @@ export function install(options: InstallOptions = {}): InstallResult {
     }
 
     // Consolidated settings.json write (atomic: read once, modify, write once)
-    log('Configuring settings.json...');
-    try {
+    // Skip for project-scoped plugins to avoid affecting global settings
+    if (projectScoped) {
+      log('Skipping settings.json configuration (project-scoped plugin)');
+    } else {
+      log('Configuring settings.json...');
+    }
+    if (!projectScoped) try {
       let existingSettings: Record<string, unknown> = {};
       if (existsSync(SETTINGS_FILE)) {
         const settingsContent = readFileSync(SETTINGS_FILE, 'utf-8');
@@ -645,15 +688,19 @@ export function install(options: InstallOptions = {}): InstallResult {
       result.hooksConfigured = false;
     }
 
-    // Save version metadata
-    const versionMetadata = {
-      version: VERSION,
-      installedAt: new Date().toISOString(),
-      installMethod: 'npm' as const,
-      lastCheckAt: new Date().toISOString()
-    };
-    writeFileSync(VERSION_FILE, JSON.stringify(versionMetadata, null, 2));
-    log('Saved version metadata');
+    // Save version metadata (skip for project-scoped plugins)
+    if (!projectScoped) {
+      const versionMetadata = {
+        version: VERSION,
+        installedAt: new Date().toISOString(),
+        installMethod: 'npm' as const,
+        lastCheckAt: new Date().toISOString()
+      };
+      writeFileSync(VERSION_FILE, JSON.stringify(versionMetadata, null, 2));
+      log('Saved version metadata');
+    } else {
+      log('Skipping version metadata (project-scoped plugin)');
+    }
 
     result.success = true;
     const hookCount = Object.keys(getHookScripts()).length;
