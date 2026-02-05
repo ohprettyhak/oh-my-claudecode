@@ -33,12 +33,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Session Index Caching** - Token tracker now caches session indices with 5-minute TTL for 50-100ms faster stats loading
 - **Space-Optimized Levenshtein** - Levenshtein algorithm now uses O(n) space instead of O(n²)
 
+### Added
+
+- **Job Management Tools** (#420) - Four new MCP tools for background Codex/Gemini job control: `wait_for_job`, `check_job_status`, `kill_job`, `list_jobs`
+- **Version Drift Detection** (#422) - Automatic detection and cleanup of stale plugin versions on session start
+
 ### Fixed
 
 - **Per-Directory Debounce** - Fixed race condition in subagent tracker where global debounce state could lose writes for different directories
 - **TOCTOU Race Condition** - Fixed time-of-check-time-of-use race in pre-compact by removing existsSync check before async read
 - **True LRU Cache** - Fixed Levenshtein cache to use true LRU eviction (delete+reinsert on hit) instead of FIFO
 - **Session Index Off-by-One** - Fixed off-by-one error in token tracker session index offset calculation
+- **Cache Hit Rate Formula** (#425) - Corrected cache hit rate calculation to include all input token types (was exceeding 100%)
+- **HUD Token Formatting** (#417) - Fixed `formatTokenCount()` returning "0.999k" for values under 1000
+- **LSP goto_definition Null Safety** (#417) - Fixed crash when LSP returns `LocationLink` objects instead of `Location`
+
+### Breaking Changes (MCP)
+
+- **MCP Response Contract** (#424) - `ask_codex` and `ask_gemini` now return file paths instead of inline content. `output_file` parameter is now required. Added `working_directory` parameter for path resolution.
+
+---
+
+## [3.9.8] - 2026-02-03
+
+### Bug Fixes
+
+- fix: auto-recover status bar after plugin update (#327, #329)
+  - Filter plugin cache versions to only those with built dist/hud/index.js
+  - Prevents picking unbuilt new version after plugin update
+
+### Features
+
+- feat: add project isolation to state files (#326, #328)
+  - Added project_path validation to all persistent mode states
+  - Prevents cross-project state contamination
+  - Windows path normalization support
+  - Backward compatible with legacy states
 
 ---
 
@@ -1855,19 +1885,3 @@ Task(
 [1.9.0]: https://github.com/Yeachan-Heo/oh-my-claude-sisyphus/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Yeachan-Heo/oh-my-claude-sisyphus/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/Yeachan-Heo/oh-my-claude-sisyphus/releases/tag/v1.7.0
-
-## [3.9.8] - 2026-02-03
-
-### Bug Fixes
-
-- fix: auto-recover status bar after plugin update (#327, #329)
-  - Filter plugin cache versions to only those with built dist/hud/index.js
-  - Prevents picking unbuilt new version after plugin update
-
-### Features
-
-- feat: add project isolation to state files (#326, #328)
-  - Added project_path validation to all persistent mode states
-  - Prevents cross-project state contamination
-  - Windows path normalization support
-  - Backward compatible with legacy states
