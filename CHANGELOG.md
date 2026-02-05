@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.3] - 2026-02-05
+
+### Fixed
+
+- **Hook TaskCreate/TaskUpdate Compatibility** - Fixed PostToolUse and PreToolUse hooks failing on `TaskCreate` and `TaskUpdate` events after Claude Code renamed the Task tool in Feb 2025 update. Updated tool name matching in `post-tool-verifier.mjs`, `pre-tool-enforcer.mjs`, and `post-tool-use.mjs` template.
+
+### Changed
+
+- **Codex Default Model** - Updated default Codex model from `gpt-5.2` to `gpt-5.3`
+- **Claude Opus 4.6 Support** - Updated all model references from `claude-opus-4-5-20251101` to `claude-opus-4-6-20260205` across config, routing, analytics, and tests
+
 ## [4.0.1] - 2026-02-05
 
 ### Fixed

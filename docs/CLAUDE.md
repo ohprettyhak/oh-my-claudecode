@@ -231,7 +231,7 @@ When you detect trigger patterns above, you MUST invoke the corresponding skill 
 
 | Tool | MCP Name | Provider | Best For |
 |------|----------|----------|----------|
-| Codex | `mcp__x__ask_codex` | OpenAI (gpt-5.2) | Code analysis, planning validation, review |
+| Codex | `mcp__x__ask_codex` | OpenAI (gpt-5.3) | Code analysis, planning validation, review |
 | Gemini | `mcp__g__ask_gemini` | Google (gemini-3-pro-preview) | Design consistency across many files (1M context) |
 
 **MCP-Direct Replacement — Call MCPs directly instead of spawning Claude agents:**
