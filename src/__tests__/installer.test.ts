@@ -251,9 +251,10 @@ describe('Installer Constants', () => {
     it('should contain essential sections', () => {
       const essentialSections = [
         'Multi-Agent Orchestration',
-        'Delegation-First Philosophy',
-        'All Skills',
-        'Cancellation',
+        'DELEGATION-FIRST PHILOSOPHY',
+        'What Happens Automatically',
+        'Magic Keywords',
+        'Stopping and Cancelling',
       ];
 
       for (const section of essentialSections) {
@@ -285,13 +286,16 @@ describe('Installer Constants', () => {
       expect(CLAUDE_MD_CONTENT).toContain('haiku');
       expect(CLAUDE_MD_CONTENT).toContain('sonnet');
       expect(CLAUDE_MD_CONTENT).toContain('opus');
-      // Agent tiers are now inline in the Agent Tier Matrix section
-      expect(CLAUDE_MD_CONTENT).toContain('Agent Tier Matrix');
+      // Agent tiers reference exists (detailed table moved to shared docs)
+      expect(CLAUDE_MD_CONTENT).toContain('Agent Tiers Reference');
+      expect(CLAUDE_MD_CONTENT).toContain('agent-tiers.md');
     });
 
     it('should document magic keywords and compatibility commands', () => {
-      // Keywords are now in skill trigger columns
-      // Check for key keywords in the skill tables
+      // New CLAUDE.md has "Magic Keywords" instead of slash commands
+      expect(CLAUDE_MD_CONTENT).toContain('Magic Keywords');
+
+      // Check for key keywords in the table
       const keywords = [
         'ralph',
         'ralplan',
@@ -303,9 +307,9 @@ describe('Installer Constants', () => {
         expect(CLAUDE_MD_CONTENT).toContain(keyword);
       }
 
-      // Verify skills section exists with trigger patterns
-      expect(CLAUDE_MD_CONTENT).toContain('All Skills');
-      expect(CLAUDE_MD_CONTENT).toContain('Trigger');
+      // Verify migration section exists (points to MIGRATION.md)
+      expect(CLAUDE_MD_CONTENT).toContain('Migration');
+      expect(CLAUDE_MD_CONTENT).toContain('MIGRATION.md');
     });
 
     it('should contain markdown tables', () => {

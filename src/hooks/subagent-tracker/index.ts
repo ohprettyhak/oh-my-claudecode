@@ -15,7 +15,6 @@ import {
   writeFileSync,
   mkdirSync,
   unlinkSync,
-  statSync,
 } from "fs";
 import { join } from "path";
 
@@ -373,7 +372,7 @@ function detectParentMode(directory: string): string {
   const modeFiles = [
     { file: "ultrapilot-state.json", mode: "ultrapilot" },
     { file: "autopilot-state.json", mode: "autopilot" },
-    { file: "swarm.db", mode: "swarm" },
+    { file: "swarm-state.json", mode: "swarm" },
     { file: "ultrawork-state.json", mode: "ultrawork" },
     { file: "ralph-state.json", mode: "ralph" },
   ];
@@ -381,31 +380,18 @@ function detectParentMode(directory: string): string {
   for (const { file, mode } of modeFiles) {
     const filePath = join(stateDir, file);
     if (existsSync(filePath)) {
-      // Special case for swarm.db - just check existence and size
-      if (file === 'swarm.db') {
-        try {
-          const stats = statSync(filePath);
-          if (stats.size > 0) {
-            return mode;
-          }
-        } catch {
-          continue;
+      try {
+        const content = readFileSync(filePath, "utf-8");
+        const state = JSON.parse(content);
+        if (
+          state.active === true ||
+          state.status === "running" ||
+          state.status === "active"
+        ) {
+          return mode;
         }
-      } else {
-        // JSON file check (existing logic)
-        try {
-          const content = readFileSync(filePath, "utf-8");
-          const state = JSON.parse(content);
-          if (
-            state.active === true ||
-            state.status === "running" ||
-            state.status === "active"
-          ) {
-            return mode;
-          }
-        } catch {
-          continue;
-        }
+      } catch {
+        continue;
       }
     }
   }

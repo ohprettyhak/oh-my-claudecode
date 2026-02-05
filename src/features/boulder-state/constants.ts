@@ -4,10 +4,8 @@
  * Ported from oh-my-opencode's boulder-state.
  */
 
-import { OmcPaths } from '../../lib/worktree-paths.js';
-
 /** Sisyphus state directory */
-export const BOULDER_DIR = OmcPaths.ROOT;
+export const BOULDER_DIR = '.omc';
 
 /** Boulder state file name */
 export const BOULDER_FILE = 'boulder.json';
@@ -22,7 +20,7 @@ export const NOTEPAD_DIR = 'notepads';
 export const NOTEPAD_BASE_PATH = `${BOULDER_DIR}/${NOTEPAD_DIR}`;
 
 /** Planner plan directory */
-export const PLANNER_PLANS_DIR = OmcPaths.PLANS;
+export const PLANNER_PLANS_DIR = '.omc/plans';
 
 /** Plan file extension */
 export const PLAN_EXTENSION = '.md';

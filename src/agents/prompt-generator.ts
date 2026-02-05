@@ -185,8 +185,7 @@ export function convertDefinitionsToConfigs(
   definitions: Record<string, {
     description: string;
     prompt: string;
-    tools?: string[];
-    disallowedTools?: string[];
+    tools: string[];
     model?: string;
     metadata?: any;
   }>
@@ -196,7 +195,6 @@ export function convertDefinitionsToConfigs(
     description: def.description,
     prompt: def.prompt,
     tools: def.tools,
-    disallowedTools: def.disallowedTools,
     model: def.model as any,
     metadata: def.metadata
   }));

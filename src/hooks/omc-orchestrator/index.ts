@@ -33,7 +33,6 @@ import {
   setPriorityContext,
 } from '../notepad/index.js';
 import { logAuditEntry } from './audit.js';
-import { getWorktreeRoot } from '../../lib/worktree-paths.js';
 
 // Re-export constants
 export * from './constants.js';
@@ -125,23 +124,10 @@ interface GitFileStat {
 /**
  * Check if a file path is allowed for direct orchestrator modification
  */
-export function isAllowedPath(filePath: string, directory?: string): boolean {
+export function isAllowedPath(filePath: string): boolean {
   if (!filePath) return true;
-  // Fast path: check relative patterns first
-  if (ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(filePath))) return true;
-  // Absolute path: normalize to relative by stripping worktree root
-  if (filePath.startsWith('/')) {
-    const root = directory ? getWorktreeRoot(directory) : getWorktreeRoot();
-    if (root && filePath.startsWith(root + '/')) {
-      const relative = filePath.slice(root.length + 1);
-      return ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(relative));
-    }
-    // If path is exactly the root, also check patterns
-    if (root && filePath === root) {
-      return ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(''));
-    }
-  }
-  return false;
+  // Check against all allowed patterns
+  return ALLOWED_PATH_PATTERNS.some(pattern => pattern.test(filePath));
 }
 
 /**
@@ -377,7 +363,7 @@ export function processOrchestratorPreTool(input: ToolExecuteInput): ToolExecute
   const filePath = (toolInput?.filePath ?? toolInput?.path ?? toolInput?.file) as string | undefined;
 
   // Allow if path is in allowed prefix
-  if (!filePath || isAllowedPath(filePath, directory)) {
+  if (!filePath || isAllowedPath(filePath)) {
     // Log allowed operation
     if (filePath) {
       logAuditEntry({
@@ -438,7 +424,7 @@ export function processOrchestratorPostTool(
   if (isWriteEditTool(toolName)) {
     const filePath = (toolInput?.filePath ?? toolInput?.path ?? toolInput?.file) as string | undefined;
 
-    if (filePath && !isAllowedPath(filePath, workDir)) {
+    if (filePath && !isAllowedPath(filePath)) {
       return {
         continue: true,
         modifiedOutput: output + DIRECT_WORK_REMINDER,

@@ -68,10 +68,8 @@ export interface AgentConfig {
   description: string;
   /** System prompt for the agent */
   prompt: string;
-  /** Tools the agent can use (optional - all tools allowed by default if omitted) */
-  tools?: string[];
-  /** Tools explicitly disallowed for this agent */
-  disallowedTools?: string[];
+  /** Tools the agent can use */
+  tools: string[];
   /** Model to use (defaults to sonnet) */
   model?: ModelType;
   /** Default model for this agent (explicit tier mapping) */
