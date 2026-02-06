@@ -312,6 +312,8 @@ export {
   analyzeContextUsage,
   getSessionTokenEstimate,
   resetSessionTokenEstimate,
+  clearRapidFireDebounce,
+  RAPID_FIRE_DEBOUNCE_MS,
   DEFAULT_THRESHOLD as PREEMPTIVE_DEFAULT_THRESHOLD,
   CRITICAL_THRESHOLD,
   COMPACTION_COOLDOWN_MS,
@@ -784,6 +786,8 @@ export {
   saveModeSummary,
   createCompactCheckpoint,
   formatCompactSummary as formatPreCompactSummary,
+  isCompactionInProgress,
+  getCompactionQueueDepth,
   type PreCompactInput,
   type CompactCheckpoint,
   type HookOutput as PreCompactHookOutput
