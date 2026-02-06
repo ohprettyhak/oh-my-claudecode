@@ -12,6 +12,7 @@ import { spawn } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'fs';
 import { dirname, resolve, relative, sep, isAbsolute, basename, join } from 'path';
 import { detectCodexCli } from './cli-detection.js';
+import { getWorktreeRoot } from '../lib/worktree-paths.js';
 import { resolveSystemPrompt, buildPromptWithSystemContext } from './prompt-injection.js';
 import { persistPrompt, persistResponse, getExpectedResponsePath } from './prompt-persistence.js';
 import { writeJobStatus, getStatusFilePath, readJobStatus } from './prompt-persistence.js';
@@ -401,6 +402,8 @@ export function executeCodexBackground(
             model: tryModel,
             status: 'completed',
             completedAt: new Date().toISOString(),
+            usedFallback: usedFallback || undefined,
+            fallbackModel: usedFallback ? tryModel : undefined,
           }, workingDirectory);
         } else {
           writeJobStatus({
@@ -500,6 +503,29 @@ export async function handleAskCodex(args: {
       content: [{ type: 'text' as const, text: `working_directory '${args.working_directory}' does not exist or is not accessible: ${(err as Error).message}` }],
       isError: true
     };
+  }
+
+  // Security: validate working_directory is within worktree (unless bypass enabled)
+  if (process.env.OMC_ALLOW_EXTERNAL_WORKDIR !== '1') {
+    const worktreeRoot = getWorktreeRoot(baseDirReal);
+    if (worktreeRoot) {
+      let worktreeReal: string;
+      try {
+        worktreeReal = realpathSync(worktreeRoot);
+      } catch {
+        // If worktree root can't be resolved, skip boundary check rather than break
+        worktreeReal = '';
+      }
+      if (worktreeReal) {
+        const relToWorktree = relative(worktreeReal, baseDirReal);
+        if (relToWorktree.startsWith('..') || isAbsolute(relToWorktree)) {
+          return {
+            content: [{ type: 'text' as const, text: `working_directory '${args.working_directory}' is outside the project worktree (${worktreeRoot}). Set OMC_ALLOW_EXTERNAL_WORKDIR=1 to bypass.` }],
+            isError: true
+          };
+        }
+      }
+    }
   }
 
 
