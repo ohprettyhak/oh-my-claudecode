@@ -1,0 +1,99 @@
+/**
+ * MCP Team Bridge - Shared TypeScript interfaces
+ *
+ * All types used across the team bridge module for MCP worker orchestration.
+ */
+/** Bridge daemon configuration — passed via --config file to bridge-entry.ts */
+export interface BridgeConfig {
+    teamName: string;
+    workerName: string;
+    provider: 'codex' | 'gemini';
+    model?: string;
+    workingDirectory: string;
+    pollIntervalMs: number;
+    taskTimeoutMs: number;
+    maxConsecutiveErrors: number;
+    outboxMaxLines: number;
+}
+/** Mirrors the JSON structure of ~/.claude/tasks/{team}/{id}.json */
+export interface TaskFile {
+    id: string;
+    subject: string;
+    description: string;
+    activeForm?: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    owner: string;
+    blocks: string[];
+    blockedBy: string[];
+    metadata?: Record<string, unknown>;
+}
+/** Partial update for a task file (only fields being changed) */
+export type TaskFileUpdate = Partial<Pick<TaskFile, 'status' | 'owner'>>;
+/** JSONL message from lead -> worker (inbox) */
+export interface InboxMessage {
+    type: 'message' | 'context';
+    content: string;
+    timestamp: string;
+}
+/** JSONL message from worker -> lead (outbox) */
+export interface OutboxMessage {
+    type: 'task_complete' | 'task_failed' | 'idle' | 'shutdown_ack' | 'heartbeat' | 'error';
+    taskId?: string;
+    summary?: string;
+    message?: string;
+    error?: string;
+    requestId?: string;
+    timestamp: string;
+}
+/** Shutdown signal file content */
+export interface ShutdownSignal {
+    requestId: string;
+    reason: string;
+    timestamp: string;
+}
+/** MCP worker member entry for config.json or shadow registry */
+export interface McpWorkerMember {
+    agentId: string;
+    name: string;
+    agentType: string;
+    model: string;
+    joinedAt: number;
+    tmuxPaneId: string;
+    cwd: string;
+    backendType: 'tmux';
+    subscriptions: string[];
+}
+/** Heartbeat file content */
+export interface HeartbeatData {
+    workerName: string;
+    teamName: string;
+    provider: 'codex' | 'gemini';
+    pid: number;
+    lastPollAt: string;
+    currentTaskId?: string;
+    consecutiveErrors: number;
+    status: 'polling' | 'executing' | 'shutdown' | 'quarantined';
+}
+/** Offset cursor for JSONL consumption */
+export interface InboxCursor {
+    bytesRead: number;
+}
+/** Result of config.json schema probe */
+export interface ConfigProbeResult {
+    probeResult: 'pass' | 'fail' | 'partial';
+    probedAt: string;
+    version: string;
+}
+/** Sidecar mapping task IDs to execution modes */
+export interface TaskModeMap {
+    teamName: string;
+    taskModes: Record<string, 'mcp_codex' | 'mcp_gemini' | 'claude_worker'>;
+}
+/** Failure sidecar for a task */
+export interface TaskFailureSidecar {
+    taskId: string;
+    lastError: string;
+    retryCount: number;
+    lastFailedAt: string;
+}
+//# sourceMappingURL=types.d.ts.map
