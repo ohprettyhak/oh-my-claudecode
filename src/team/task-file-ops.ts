@@ -7,12 +7,141 @@
  * Tasks live at ~/.claude/tasks/{teamName}/{id}.json
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
+import { readFileSync, readdirSync, existsSync, openSync, closeSync, unlinkSync, writeSync, statSync, constants as fsConstants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import type { TaskFile, TaskFileUpdate, TaskFailureSidecar } from './types.js';
 import { sanitizeName } from './tmux-session.js';
-import { atomicWriteJson, validateResolvedPath } from './fs-utils.js';
+import { atomicWriteJson, validateResolvedPath, ensureDirWithMode } from './fs-utils.js';
+
+// ─── Lock-based atomic claiming ────────────────────────────────────────────
+
+/** Handle returned by acquireTaskLock; pass to releaseTaskLock. */
+export interface LockHandle {
+  fd: number;
+  path: string;
+}
+
+/** Default age (ms) after which a lock file is considered stale. */
+const DEFAULT_STALE_LOCK_MS = 30_000;
+
+/**
+ * Check if a process with the given PID is alive.
+ * Returns false for PIDs <= 0 or if kill(pid, 0) throws ESRCH.
+ */
+function isPidAlive(pid: number): boolean {
+  if (pid <= 0 || !Number.isFinite(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e: unknown) {
+    // EPERM means the process exists but we don't have permission — still alive
+    if (e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'EPERM') return true;
+    return false;
+  }
+}
+
+/**
+ * Try to acquire an exclusive lock file for a task.
+ *
+ * Uses O_CREAT|O_EXCL|O_WRONLY which atomically creates the file only if
+ * it doesn't already exist — the kernel guarantees no two openers succeed.
+ *
+ * If the lock file already exists, checks for staleness (age > staleLockMs
+ * AND owner PID is dead) and reaps if stale, retrying once.
+ *
+ * Returns a LockHandle on success, or null if the lock is held by another live worker.
+ */
+export function acquireTaskLock(
+  teamName: string,
+  taskId: string,
+  opts?: { staleLockMs?: number; workerName?: string },
+): LockHandle | null {
+  const staleLockMs = opts?.staleLockMs ?? DEFAULT_STALE_LOCK_MS;
+  const dir = tasksDir(teamName);
+  ensureDirWithMode(dir);
+  const lockPath = join(dir, `${sanitizeTaskId(taskId)}.lock`);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = openSync(lockPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600);
+      // Write payload so stale-detection can read PID + timestamp
+      const payload = JSON.stringify({
+        pid: process.pid,
+        workerName: opts?.workerName ?? '',
+        timestamp: Date.now(),
+      });
+      writeSync(fd, payload, null, 'utf-8');
+      return { fd, path: lockPath };
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'EEXIST') {
+        // Lock file exists — check if stale
+        if (attempt === 0 && isLockStale(lockPath, staleLockMs)) {
+          try { unlinkSync(lockPath); } catch { /* another worker reaped it */ }
+          continue; // retry once
+        }
+        return null; // held by a live worker
+      }
+      throw err; // unexpected error — bubble up
+    }
+  }
+  return null;
+}
+
+/**
+ * Release a previously acquired task lock.
+ * Closes the file descriptor and removes the lock file.
+ */
+export function releaseTaskLock(handle: LockHandle): void {
+  try { closeSync(handle.fd); } catch { /* already closed */ }
+  try { unlinkSync(handle.path); } catch { /* already removed */ }
+}
+
+/**
+ * Execute a function while holding an exclusive task lock.
+ * Returns the function's result, or null if the lock could not be acquired.
+ */
+export async function withTaskLock<T>(
+  teamName: string,
+  taskId: string,
+  fn: () => T | Promise<T>,
+  opts?: { staleLockMs?: number; workerName?: string },
+): Promise<T | null> {
+  const handle = acquireTaskLock(teamName, taskId, opts);
+  if (!handle) return null;
+  try {
+    return await fn();
+  } finally {
+    releaseTaskLock(handle);
+  }
+}
+
+/**
+ * Check if an existing lock file is stale.
+ * A lock is stale if it's older than staleLockMs AND the owning PID is dead.
+ */
+function isLockStale(lockPath: string, staleLockMs: number): boolean {
+  try {
+    const stat = statSync(lockPath);
+    const ageMs = Date.now() - stat.mtimeMs;
+    if (ageMs < staleLockMs) return false;
+
+    // Try to read PID from the lock payload
+    try {
+      const raw = readFileSync(lockPath, 'utf-8');
+      const payload = JSON.parse(raw) as { pid?: number };
+      if (payload.pid && isPidAlive(payload.pid)) return false;
+    } catch {
+      // Malformed or unreadable — treat as stale if old enough
+    }
+    return true;
+  } catch {
+    // Lock file disappeared between check and stat — not stale, just gone
+    return false;
+  }
+}
+
+// ─── End lock helpers ──────────────────────────────────────────────────────
 
 /** Validate task ID to prevent path traversal */
 function sanitizeTaskId(taskId: string): string {
@@ -52,23 +181,58 @@ export function readTask(teamName: string, taskId: string): TaskFile | null {
 /**
  * Atomic update: reads full task JSON, patches specified fields, writes back.
  * Preserves unknown fields to avoid data loss.
+ *
+ * When useLock is true (default), wraps the read-modify-write in an O_EXCL
+ * lock to prevent lost updates from concurrent writers. Falls back to
+ * unlocked write if the lock cannot be acquired within a single attempt
+ * (backward-compatible degradation with a console warning).
  */
-export function updateTask(teamName: string, taskId: string, updates: TaskFileUpdate): void {
-  const filePath = taskPath(teamName, taskId);
-  let task: Record<string, unknown>;
-  try {
-    const raw = readFileSync(filePath, 'utf-8');
-    task = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    throw new Error(`Task file not found or malformed: ${taskId}`);
-  }
-  // Merge updates into existing task (preserving unknown fields)
-  for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
-      task[key] = value;
+export function updateTask(
+  teamName: string,
+  taskId: string,
+  updates: TaskFileUpdate,
+  opts?: { useLock?: boolean },
+): void {
+  const useLock = opts?.useLock ?? true;
+
+  const doUpdate = () => {
+    const filePath = taskPath(teamName, taskId);
+    let task: Record<string, unknown>;
+    try {
+      const raw = readFileSync(filePath, 'utf-8');
+      task = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Task file not found or malformed: ${taskId}`);
     }
+    for (const [key, value] of Object.entries(updates)) {
+      if (value !== undefined) {
+        task[key] = value;
+      }
+    }
+    atomicWriteJson(filePath, task);
+  };
+
+  if (!useLock) {
+    doUpdate();
+    return;
   }
-  atomicWriteJson(filePath, task);
+
+  const handle = acquireTaskLock(teamName, taskId);
+  if (!handle) {
+    // Fallback: another worker holds the lock — proceed without lock + warn
+    // This maintains backward compatibility while logging the degradation
+    if (typeof process !== 'undefined' && process.stderr) {
+      process.stderr.write(`[task-file-ops] WARN: could not acquire lock for task ${taskId}, updating without lock\n`);
+    }
+    doUpdate();
+    return;
+  }
+
+  try {
+    doUpdate();
+  } finally {
+    releaseTaskLock(handle);
+  }
 }
 
 /**
@@ -79,11 +243,8 @@ export function updateTask(teamName: string, taskId: string, updates: TaskFileUp
  *   - all blockedBy tasks have status 'completed'
  * Sorted by ID ascending.
  *
- * TOCTOU mitigation (best-effort, not true flock()):
- * 1. Write claim marker {claimedBy, claimedAt, claimPid} via updateTask
- * 2. Wait 200ms + random 0-100ms jitter for other workers to also write their claims
- * 3. Re-read task and verify claimedBy + claimPid still match this worker
- * 4. If mismatch, another worker won the race — skip to next task
+ * Uses O_EXCL lock files for atomic claiming — no sleep/jitter needed.
+ * The kernel guarantees only one worker can create the lock file.
  */
 export async function findNextTask(teamName: string, workerName: string): Promise<TaskFile | null> {
   const dir = tasksDir(teamName);
@@ -92,35 +253,49 @@ export async function findNextTask(teamName: string, workerName: string): Promis
   const taskIds = listTaskIds(teamName);
 
   for (const id of taskIds) {
+    // Quick pre-check without lock (avoid lock overhead for obvious skips)
     const task = readTask(teamName, id);
     if (!task) continue;
     if (task.status !== 'pending') continue;
     if (task.owner !== workerName) continue;
     if (!areBlockersResolved(teamName, task.blockedBy)) continue;
 
-    // Write claim marker
-    updateTask(teamName, id, {
-      claimedBy: workerName,
-      claimedAt: Date.now(),
-      claimPid: process.pid,
-    });
+    // Attempt atomic lock
+    const handle = acquireTaskLock(teamName, id, { workerName });
+    if (!handle) continue; // another worker holds the lock — skip
 
-    // Wait for other workers to also attempt claims (200ms + random 0-100ms jitter)
-    const jitter = Math.floor(Math.random() * 100);
-    await new Promise(resolve => setTimeout(resolve, 200 + jitter));
+    try {
+      // Re-read under lock to verify state hasn't changed
+      const freshTask = readTask(teamName, id);
+      if (
+        !freshTask ||
+        freshTask.status !== 'pending' ||
+        freshTask.owner !== workerName ||
+        !areBlockersResolved(teamName, freshTask.blockedBy)
+      ) {
+        continue; // state changed between pre-check and lock acquisition
+      }
 
-    // Re-read and verify claim still belongs to us
-    const freshTask = readTask(teamName, id);
-    if (
-      !freshTask ||
-      freshTask.status !== 'pending' ||
-      freshTask.claimedBy !== workerName ||
-      freshTask.claimPid !== process.pid
-    ) {
-      continue;
+      // Claim the task atomically
+      const filePath = join(tasksDir(teamName), `${sanitizeTaskId(id)}.json`);
+      let taskData: Record<string, unknown>;
+      try {
+        const raw = readFileSync(filePath, 'utf-8');
+        taskData = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      taskData.claimedBy = workerName;
+      taskData.claimedAt = Date.now();
+      taskData.claimPid = process.pid;
+      taskData.status = 'in_progress';
+      atomicWriteJson(filePath, taskData);
+
+      return { ...freshTask, claimedBy: workerName, claimedAt: taskData.claimedAt as number, claimPid: process.pid, status: 'in_progress' };
+    } finally {
+      releaseTaskLock(handle);
     }
-
-    return freshTask;
   }
 
   return null;
