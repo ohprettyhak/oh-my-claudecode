@@ -10,6 +10,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync } fr
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { fileURLToPath } from 'url';
+import { readStdin } from './lib/stdin.mjs';
 
 // Get the directory of this script to resolve the dist module
 const __filename = fileURLToPath(import.meta.url);
@@ -37,15 +38,6 @@ try {
     mkdirSync(stateDir, { recursive: true });
   }
 } catch {}
-
-// Read all stdin
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
 
 // Load session statistics
 function loadStats() {

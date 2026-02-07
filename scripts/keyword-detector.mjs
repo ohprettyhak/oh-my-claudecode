@@ -28,6 +28,7 @@
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { readStdin } from './lib/stdin.mjs';
 
 const ULTRATHINK_MESSAGE = `<think-mode>
 
@@ -45,15 +46,6 @@ Use your extended thinking capabilities to provide the most thorough and well-re
 
 ---
 `;
-
-// Read all stdin
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
 
 // Extract prompt from various JSON structures
 function extractPrompt(input) {

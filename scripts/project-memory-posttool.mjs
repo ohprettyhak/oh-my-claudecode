@@ -7,17 +7,7 @@
 
 import { learnFromToolOutput } from '../dist/hooks/project-memory/learner.js';
 import { findProjectRoot } from '../dist/hooks/rules-injector/finder.js';
-
-/**
- * Read JSON input from stdin
- */
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
+import { readStdin } from './lib/stdin.mjs';
 
 /**
  * Main hook execution

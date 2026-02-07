@@ -8,15 +8,7 @@
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-
-// Read all stdin
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
+import { readStdin } from './lib/stdin.mjs';
 
 // Simple JSON field extraction
 function extractJsonField(input, field, defaultValue = '') {

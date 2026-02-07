@@ -13,6 +13,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'fs';
 import { join, basename } from 'path';
 import { homedir } from 'os';
+import { readStdin } from './lib/stdin.mjs';
 import { createRequire } from 'module';
 
 // Try to load the compiled bridge bundle
@@ -181,15 +182,6 @@ function findMatchingSkillsFallback(prompt, directory, sessionId) {
 // =============================================================================
 // Main Logic (uses bridge if available, fallback otherwise)
 // =============================================================================
-
-// Read all stdin
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
 
 // Find matching skills - delegates to bridge or fallback
 function findMatchingSkills(prompt, directory, sessionId) {
