@@ -16,14 +16,34 @@ function isAllowedTransition(from: TeamPipelinePhase, to: TeamPipelinePhase): bo
   return ALLOWED[from].includes(to);
 }
 
-function hasRequiredArtifactsForPhase(state: TeamPipelineState, next: TeamPipelinePhase): boolean {
+/** Validates that a value is a non-negative finite integer */
+export function isNonNegativeFiniteInteger(n: unknown): n is number {
+  return typeof n === 'number' && Number.isFinite(n) && Number.isInteger(n) && n >= 0;
+}
+
+function hasRequiredArtifactsForPhase(state: TeamPipelineState, next: TeamPipelinePhase): string | null {
   if (next === 'team-exec') {
-    return Boolean(state.artifacts.plan_path || state.artifacts.prd_path);
+    if (!state.artifacts.plan_path && !state.artifacts.prd_path) {
+      return 'team-exec requires plan_path or prd_path artifact';
+    }
+    return null;
   }
   if (next === 'team-verify') {
-    return state.execution.tasks_total > 0 && state.execution.tasks_completed >= state.execution.tasks_total;
+    if (!isNonNegativeFiniteInteger(state.execution.tasks_total)) {
+      return `tasks_total must be a non-negative finite integer, got: ${state.execution.tasks_total}`;
+    }
+    if (!isNonNegativeFiniteInteger(state.execution.tasks_completed)) {
+      return `tasks_completed must be a non-negative finite integer, got: ${state.execution.tasks_completed}`;
+    }
+    if (state.execution.tasks_total <= 0) {
+      return 'tasks_total must be > 0 for team-verify transition';
+    }
+    if (state.execution.tasks_completed < state.execution.tasks_total) {
+      return `tasks_completed (${state.execution.tasks_completed}) < tasks_total (${state.execution.tasks_total})`;
+    }
+    return null;
   }
-  return true;
+  return null;
 }
 
 export function transitionTeamPhase(
@@ -57,11 +77,12 @@ export function transitionTeamPhase(
     return markTeamPhase(resumed, next, reason ?? 'resumed-from-cancelled');
   }
 
-  if (!hasRequiredArtifactsForPhase(state, next)) {
+  const guardFailure = hasRequiredArtifactsForPhase(state, next);
+  if (guardFailure !== null) {
     return {
       ok: false,
       state,
-      reason: `Guard failed for transition: ${state.phase} -> ${next}`,
+      reason: guardFailure,
     };
   }
 

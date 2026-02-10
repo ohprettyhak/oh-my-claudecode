@@ -560,17 +560,18 @@ export class LspClient {
 }
 
 /** Idle timeout: disconnect LSP clients unused for 5 minutes */
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+export const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 /** Check for idle clients every 60 seconds */
-const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
+export const IDLE_CHECK_INTERVAL_MS = 60 * 1000;
 
 /**
  * Client manager - maintains a pool of LSP clients per workspace/server
- * with idle eviction to free resources.
+ * with idle eviction to free resources and in-flight request protection.
  */
 class LspClientManager {
   private clients = new Map<string, LspClient>();
   private lastUsed = new Map<string, number>();
+  private inFlightCount = new Map<string, number>();
   private idleTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
@@ -605,6 +606,49 @@ class LspClientManager {
     this.lastUsed.set(key, Date.now());
 
     return client;
+  }
+
+  /**
+   * Run a function with in-flight tracking for the client serving filePath.
+   * While the function is running, the client is protected from idle eviction.
+   * The lastUsed timestamp is refreshed on both entry and exit.
+   */
+  async runWithClientLease<T>(filePath: string, fn: (client: LspClient) => Promise<T>): Promise<T> {
+    const serverConfig = getServerForFile(filePath);
+    if (!serverConfig) {
+      throw new Error(`No language server available for: ${filePath}`);
+    }
+
+    const workspaceRoot = this.findWorkspaceRoot(filePath);
+    const key = `${workspaceRoot}:${serverConfig.command}`;
+
+    let client = this.clients.get(key);
+    if (!client) {
+      client = new LspClient(workspaceRoot, serverConfig);
+      try {
+        await client.connect();
+        this.clients.set(key, client);
+      } catch (error) {
+        throw error;
+      }
+    }
+
+    // Touch timestamp and increment in-flight counter
+    this.lastUsed.set(key, Date.now());
+    this.inFlightCount.set(key, (this.inFlightCount.get(key) || 0) + 1);
+
+    try {
+      return await fn(client);
+    } finally {
+      // Decrement in-flight counter and refresh timestamp
+      const count = (this.inFlightCount.get(key) || 1) - 1;
+      if (count <= 0) {
+        this.inFlightCount.delete(key);
+      } else {
+        this.inFlightCount.set(key, count);
+      }
+      this.lastUsed.set(key, Date.now());
+    }
   }
 
   /**
@@ -649,12 +693,17 @@ class LspClientManager {
   }
 
   /**
-   * Evict clients that haven't been used within IDLE_TIMEOUT_MS
+   * Evict clients that haven't been used within IDLE_TIMEOUT_MS.
+   * Clients with in-flight requests are never evicted.
    */
   private evictIdleClients(): void {
     const now = Date.now();
     for (const [key, lastUsedTime] of this.lastUsed.entries()) {
       if (now - lastUsedTime > IDLE_TIMEOUT_MS) {
+        // Skip eviction if there are in-flight requests
+        if ((this.inFlightCount.get(key) || 0) > 0) {
+          continue;
+        }
         const client = this.clients.get(key);
         if (client) {
           client.disconnect().catch(() => {
@@ -662,6 +711,7 @@ class LspClientManager {
           });
           this.clients.delete(key);
           this.lastUsed.delete(key);
+          this.inFlightCount.delete(key);
         }
       }
     }
@@ -669,18 +719,48 @@ class LspClientManager {
 
   /**
    * Disconnect all clients and stop idle checking.
-   * Use for session cleanup.
+   * Uses Promise.allSettled so one failing disconnect doesn't block others.
+   * Maps are always cleared regardless of individual disconnect failures.
    */
   async disconnectAll(): Promise<void> {
     if (this.idleTimer) {
       clearInterval(this.idleTimer);
       this.idleTimer = null;
     }
-    for (const client of this.clients.values()) {
-      await client.disconnect();
+
+    const entries = Array.from(this.clients.entries());
+    const results = await Promise.allSettled(
+      entries.map(([, client]) => client.disconnect())
+    );
+
+    // Log any per-client failures at warn level
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        const key = entries[i][0];
+        console.warn(`LSP disconnectAll: failed to disconnect client "${key}": ${result.reason}`);
+      }
     }
+
+    // Always clear maps regardless of individual failures
     this.clients.clear();
     this.lastUsed.clear();
+    this.inFlightCount.clear();
+  }
+
+  /** Expose in-flight count for testing */
+  getInFlightCount(key: string): number {
+    return this.inFlightCount.get(key) || 0;
+  }
+
+  /** Expose client count for testing */
+  get clientCount(): number {
+    return this.clients.size;
+  }
+
+  /** Trigger idle eviction manually (exposed for testing) */
+  triggerEviction(): void {
+    this.evictIdleClients();
   }
 }
 

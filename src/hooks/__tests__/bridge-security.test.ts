@@ -8,7 +8,7 @@
  * - Permission handler rejection of dangerous commands
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -22,7 +22,7 @@ import {
   PermissionRequestInput,
 } from '../permission-handler/index.js';
 import { validatePath } from '../../lib/worktree-paths.js';
-import { normalizeHookInput } from '../bridge-normalize.js';
+import { normalizeHookInput, SENSITIVE_HOOKS, KNOWN_FIELDS, isAlreadyCamelCase, HookInputSchema } from '../bridge-normalize.js';
 import { readAutopilotState } from '../autopilot/state.js';
 
 // ============================================================================
@@ -364,7 +364,7 @@ describe('Input Normalization Security', () => {
     expect(normalizeHookInput(42)).toEqual({});
   });
 
-  it('should pass through unknown fields unchanged', () => {
+  it('should pass through unknown fields for non-sensitive hooks', () => {
     const raw = {
       session_id: 'test',
       cwd: '/tmp',
@@ -372,7 +372,7 @@ describe('Input Normalization Security', () => {
       agent_id: 'agent-123',
     };
 
-    const normalized = normalizeHookInput(raw);
+    const normalized = normalizeHookInput(raw, 'pre-tool-use');
     expect((normalized as Record<string, unknown>).custom_field).toBe('value');
     expect((normalized as Record<string, unknown>).agent_id).toBe('agent-123');
   });
@@ -391,5 +391,162 @@ describe('Input Normalization Security', () => {
     expect(normalized.sessionId).toBe('snake-session');
     expect(normalized.toolName).toBe('SnakeTool');
     expect(normalized.directory).toBe('/snake/dir');
+  });
+});
+
+// ============================================================================
+// Sensitive Hook Field Filtering
+// ============================================================================
+
+describe('Sensitive Hook Field Filtering', () => {
+  it('should drop unknown fields for sensitive hooks', () => {
+    for (const hookType of SENSITIVE_HOOKS) {
+      const raw = {
+        session_id: 'test-session',
+        cwd: '/tmp/project',
+        injected_evil: 'malicious-payload',
+        __proto_pollute__: 'bad',
+      };
+
+      const normalized = normalizeHookInput(raw, hookType) as Record<string, unknown>;
+      expect(normalized.sessionId).toBe('test-session');
+      expect(normalized.directory).toBe('/tmp/project');
+      expect(normalized.injected_evil).toBeUndefined();
+      expect(normalized.__proto_pollute__).toBeUndefined();
+    }
+  });
+
+  it('should allow known fields through for sensitive hooks', () => {
+    const raw = {
+      session_id: 'test-session',
+      cwd: '/tmp/project',
+      agent_id: 'agent-1',       // in KNOWN_FIELDS
+      permission_mode: 'default', // in KNOWN_FIELDS
+    };
+
+    const normalized = normalizeHookInput(raw, 'permission-request') as Record<string, unknown>;
+    expect(normalized.sessionId).toBe('test-session');
+    expect(normalized.agent_id).toBe('agent-1');
+    expect(normalized.permission_mode).toBe('default');
+  });
+
+  it('should pass through unknown fields for non-sensitive hooks with debug warning', () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    const raw = {
+      session_id: 'test',
+      cwd: '/tmp',
+      totally_custom: 'some-value',
+    };
+
+    const normalized = normalizeHookInput(raw, 'pre-tool-use') as Record<string, unknown>;
+    expect(normalized.totally_custom).toBe('some-value');
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Unknown field "totally_custom"')
+    );
+
+    debugSpy.mockRestore();
+  });
+
+  it('should not warn for known fields on non-sensitive hooks', () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    const raw = {
+      session_id: 'test',
+      cwd: '/tmp',
+      agent_id: 'agent-1',  // known field
+    };
+
+    normalizeHookInput(raw, 'post-tool-use');
+    // Should not have warned about agent_id since it's known
+    const calls = debugSpy.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('agent_id')
+    );
+    expect(calls).toHaveLength(0);
+
+    debugSpy.mockRestore();
+  });
+});
+
+// ============================================================================
+// Fast-Path Optimization
+// ============================================================================
+
+describe('Normalization Fast-Path', () => {
+  it('should detect already-camelCase input', () => {
+    expect(isAlreadyCamelCase({ sessionId: 'x', toolName: 'Read', directory: '/tmp' })).toBe(true);
+    expect(isAlreadyCamelCase({ sessionId: 'x' })).toBe(true);
+  });
+
+  it('should not fast-path snake_case input', () => {
+    expect(isAlreadyCamelCase({ session_id: 'x', tool_name: 'Read' })).toBe(false);
+  });
+
+  it('should not fast-path mixed input', () => {
+    expect(isAlreadyCamelCase({ sessionId: 'x', tool_name: 'Read' })).toBe(false);
+  });
+
+  it('should not fast-path input without marker keys', () => {
+    expect(isAlreadyCamelCase({ foo: 'bar', baz: 123 })).toBe(false);
+  });
+
+  it('should skip Zod parse on camelCase-only input', () => {
+    const safeParseOrig = HookInputSchema.safeParse.bind(HookInputSchema);
+    const safeParseSpy = vi.spyOn(HookInputSchema, 'safeParse');
+
+    const camelInput = {
+      sessionId: 'abc',
+      toolName: 'Read',
+      directory: '/tmp/test',
+    };
+
+    const result = normalizeHookInput(camelInput);
+    expect(result.sessionId).toBe('abc');
+    expect(result.toolName).toBe('Read');
+    expect(result.directory).toBe('/tmp/test');
+    expect(safeParseSpy).not.toHaveBeenCalled();
+
+    safeParseSpy.mockRestore();
+  });
+
+  it('should invoke Zod parse on snake_case input', () => {
+    const safeParseSpy = vi.spyOn(HookInputSchema, 'safeParse');
+
+    const snakeInput = {
+      session_id: 'abc',
+      tool_name: 'Read',
+      cwd: '/tmp/test',
+    };
+
+    normalizeHookInput(snakeInput);
+    expect(safeParseSpy).toHaveBeenCalledTimes(1);
+
+    safeParseSpy.mockRestore();
+  });
+
+  it('should retain snake_case precedence even with fast-path disabled', () => {
+    // Mixed input forces slow path; snake_case should still win
+    const raw = {
+      session_id: 'snake-wins',
+      sessionId: 'camel-loses',
+      tool_name: 'SnakeTool',
+      toolName: 'CamelTool',
+    };
+
+    const normalized = normalizeHookInput(raw);
+    expect(normalized.sessionId).toBe('snake-wins');
+    expect(normalized.toolName).toBe('SnakeTool');
+  });
+
+  it('should apply sensitive filtering on fast-path too', () => {
+    const camelInput = {
+      sessionId: 'abc',
+      directory: '/tmp',
+      injected: 'evil',
+    };
+
+    const normalized = normalizeHookInput(camelInput, 'permission-request') as Record<string, unknown>;
+    expect(normalized.sessionId).toBe('abc');
+    expect(normalized.injected).toBeUndefined();
   });
 });

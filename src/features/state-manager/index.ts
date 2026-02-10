@@ -128,7 +128,7 @@ export function readState<T = StateData>(
       if (cached && cached.mtime === mtime && (Date.now() - cached.cachedAt) < STATE_CACHE_TTL_MS) {
         return {
           exists: true,
-          data: cached.data as T,
+          data: structuredClone(cached.data) as T,
           foundAt: standardPath,
           legacyLocations: [],
         };
@@ -141,36 +141,17 @@ export function readState<T = StateData>(
       const content = fs.readFileSync(standardPath, "utf-8");
       const data = JSON.parse(content) as T;
 
-      // Update cache
+      // Update cache with a defensive clone so callers cannot corrupt it
       try {
         const stat = fs.statSync(standardPath);
-        stateCache.set(standardPath, { data, mtime: stat.mtimeMs, cachedAt: Date.now() });
+        stateCache.set(standardPath, { data: structuredClone(data), mtime: stat.mtimeMs, cachedAt: Date.now() });
       } catch {
         // statSync failed, skip caching
       }
 
-      // Check for stale state: if _meta.updatedAt is older than TTL, auto-mark inactive
-      const record = data as Record<string, unknown>;
-      const meta = record._meta as Record<string, unknown> | undefined;
-      if (meta?.updatedAt) {
-        const updatedAt = new Date(meta.updatedAt as string).getTime();
-        if (!isNaN(updatedAt) && Date.now() - updatedAt > MAX_STATE_AGE_MS) {
-          if (record.active === true) {
-            console.warn(
-              `[state-manager] State "${name}" is stale (last updated ${meta.updatedAt}), marking inactive`,
-            );
-            record.active = false;
-            // Write back the deactivated state
-            try {
-              atomicWriteJsonSync(standardPath, record);
-            } catch { /* best-effort */ }
-          }
-        }
-      }
-
       return {
         exists: true,
-        data,
+        data: structuredClone(data) as T,
         foundAt: standardPath,
         legacyLocations: [],
       };
@@ -517,10 +498,53 @@ export function cleanupOrphanedStates(options?: CleanupOptions): CleanupResult {
 }
 
 /**
+ * Determine whether a state's metadata indicates staleness.
+ *
+ * A state is stale when **both** `updatedAt` and `heartbeatAt` (if present)
+ * are older than `maxAgeMs`.  If either timestamp is recent the state is
+ * considered alive — this allows long-running workflows that send heartbeats
+ * to survive the stale-check.
+ */
+export function isStateStale(
+  meta: { updatedAt?: string; heartbeatAt?: string },
+  now: number,
+  maxAgeMs: number,
+): boolean {
+  const updatedAt = meta.updatedAt
+    ? new Date(meta.updatedAt).getTime()
+    : undefined;
+  const heartbeatAt = meta.heartbeatAt
+    ? new Date(meta.heartbeatAt).getTime()
+    : undefined;
+
+  // If updatedAt is recent, not stale
+  if (updatedAt && !isNaN(updatedAt) && now - updatedAt <= maxAgeMs) {
+    return false;
+  }
+
+  // If heartbeatAt is recent, not stale
+  if (heartbeatAt && !isNaN(heartbeatAt) && now - heartbeatAt <= maxAgeMs) {
+    return false;
+  }
+
+  // At least one timestamp must exist and be parseable to declare staleness
+  const hasValidTimestamp =
+    (updatedAt !== undefined && !isNaN(updatedAt)) ||
+    (heartbeatAt !== undefined && !isNaN(heartbeatAt));
+
+  return hasValidTimestamp;
+}
+
+/**
  * Scan all state files in a directory and mark stale ones as inactive.
  *
- * A state is considered stale if its `_meta.updatedAt` timestamp is older
- * than `maxAgeMs` (defaults to MAX_STATE_AGE_MS = 4 hours).
+ * A state is considered stale if both `_meta.updatedAt` and
+ * `_meta.heartbeatAt` are older than `maxAgeMs` (defaults to
+ * MAX_STATE_AGE_MS = 4 hours).  States with a recent heartbeat are
+ * skipped so that long-running workflows are not killed prematurely.
+ *
+ * This is the **only** place that deactivates stale states — the read
+ * path (`readState`) is a pure read with no side-effects.
  *
  * @returns Number of states that were marked inactive.
  */
@@ -549,16 +573,15 @@ export function cleanupStaleStates(
 
         if (data.active !== true) continue;
 
-        const meta = data._meta as Record<string, unknown> | undefined;
-        const updatedAt = meta?.updatedAt
-          ? new Date(meta.updatedAt as string).getTime()
-          : undefined;
+        const meta = (data._meta as Record<string, unknown> | undefined) ?? {};
 
-        if (updatedAt && !isNaN(updatedAt) && now - updatedAt > maxAgeMs) {
+        if (isStateStale(meta as { updatedAt?: string; heartbeatAt?: string }, now, maxAgeMs)) {
           console.warn(
-            `[state-manager] cleanupStaleStates: marking "${file}" inactive (last updated ${meta!.updatedAt})`,
+            `[state-manager] cleanupStaleStates: marking "${file}" inactive (last updated ${meta.updatedAt ?? "unknown"})`,
           );
           data.active = false;
+          // Invalidate cache for this path
+          stateCache.delete(filePath);
           try {
             atomicWriteJsonSync(filePath, data);
             cleaned++;

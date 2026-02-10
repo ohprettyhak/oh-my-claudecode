@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   processHook,
   resetSkipHooksCache,
+  requiredKeysForHook,
   HookInput,
   HookOutput,
   HookType,
@@ -412,6 +413,202 @@ describe('processHook - Routing Matrix', () => {
       expect(result.continue).toBe(true);
 
       spy.mockRestore();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: camelCase validation after normalization (PR #512 fix)
+  // --------------------------------------------------------------------------
+
+  describe('camelCase validation after normalization', () => {
+    const affectedHooks: HookType[] = [
+      'session-end',
+      'subagent-start',
+      'subagent-stop',
+      'pre-compact',
+      'setup-init',
+      'setup-maintenance',
+    ];
+
+    for (const hookType of affectedHooks) {
+      it(`"${hookType}" should pass validation with camelCase input (post-normalization)`, async () => {
+        // Suppress console.error from lazy-load failures in non-existent dirs
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        // camelCase input (as produced by normalizeHookInput)
+        const input: HookInput = {
+          sessionId: 'test-session-abc',
+          directory: '/tmp/test-routing',
+          toolName: 'Bash',
+        };
+
+        const result = await processHook(hookType, input);
+        // Should NOT silently fail validation — it should reach the handler
+        // (handler may still return continue:true due to missing state files, which is fine)
+        expect(result).toBeDefined();
+        expect(typeof result.continue).toBe('boolean');
+
+        // The key assertion: validation should NOT log a "missing keys" error
+        // for sessionId/directory since they are present in camelCase
+        const missingKeysLogs = spy.mock.calls.filter(
+          (args) => typeof args[0] === 'string' && args[0].includes('missing keys'),
+        );
+        expect(missingKeysLogs).toHaveLength(0);
+
+        spy.mockRestore();
+      });
+    }
+
+    it('"permission-request" should pass validation with camelCase input including toolName', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const input: HookInput = {
+        sessionId: 'test-session-abc',
+        directory: '/tmp/test-routing',
+        toolName: 'Bash',
+      };
+
+      const result = await processHook('permission-request', input);
+      expect(result).toBeDefined();
+      expect(typeof result.continue).toBe('boolean');
+
+      const missingKeysLogs = spy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('missing keys'),
+      );
+      expect(missingKeysLogs).toHaveLength(0);
+
+      spy.mockRestore();
+    });
+
+    it('should fail validation when required camelCase keys are missing', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Missing sessionId and directory
+      const input = { prompt: 'hello' } as unknown as HookInput;
+
+      const result = await processHook('session-end', input);
+      expect(result).toEqual({ continue: true });
+
+      // Should have logged the missing keys
+      const missingKeysLogs = spy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('missing keys'),
+      );
+      expect(missingKeysLogs.length).toBeGreaterThan(0);
+
+      spy.mockRestore();
+    });
+
+    it('snake_case input should be normalized and pass validation', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Raw snake_case input as Claude Code would send
+      const rawInput = {
+        session_id: 'test-session-xyz',
+        cwd: '/tmp/test-routing',
+        tool_name: 'Read',
+      } as unknown as HookInput;
+
+      const result = await processHook('session-end', rawInput);
+      expect(result).toBeDefined();
+      expect(typeof result.continue).toBe('boolean');
+
+      // normalizeHookInput converts session_id→sessionId, cwd→directory
+      // so validation against camelCase keys should succeed
+      const missingKeysLogs = spy.mock.calls.filter(
+        (args) => typeof args[0] === 'string' && args[0].includes('missing keys'),
+      );
+      expect(missingKeysLogs).toHaveLength(0);
+
+      spy.mockRestore();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: requiredKeysForHook helper
+  // --------------------------------------------------------------------------
+
+  describe('requiredKeysForHook', () => {
+    it('should return camelCase keys for session-end', () => {
+      expect(requiredKeysForHook('session-end')).toEqual(['sessionId', 'directory']);
+    });
+
+    it('should return camelCase keys for subagent-start', () => {
+      expect(requiredKeysForHook('subagent-start')).toEqual(['sessionId', 'directory']);
+    });
+
+    it('should return camelCase keys for subagent-stop', () => {
+      expect(requiredKeysForHook('subagent-stop')).toEqual(['sessionId', 'directory']);
+    });
+
+    it('should return camelCase keys for pre-compact', () => {
+      expect(requiredKeysForHook('pre-compact')).toEqual(['sessionId', 'directory']);
+    });
+
+    it('should return camelCase keys for setup-init', () => {
+      expect(requiredKeysForHook('setup-init')).toEqual(['sessionId', 'directory']);
+    });
+
+    it('should return camelCase keys for setup-maintenance', () => {
+      expect(requiredKeysForHook('setup-maintenance')).toEqual(['sessionId', 'directory']);
+    });
+
+    it('should return camelCase keys with toolName for permission-request', () => {
+      expect(requiredKeysForHook('permission-request')).toEqual(['sessionId', 'directory', 'toolName']);
+    });
+
+    it('should return empty array for unknown hook type', () => {
+      expect(requiredKeysForHook('unknown-hook')).toEqual([]);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Regression: autopilot session isolation (sessionId threading)
+  // --------------------------------------------------------------------------
+
+  describe('autopilot session threading', () => {
+    it('should pass sessionId to readAutopilotState for session isolation', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // With a sessionId, the autopilot handler should thread it to readAutopilotState
+      // Since no state file exists, it returns continue:true — but it should not crash
+      const input: HookInput = {
+        sessionId: 'isolated-session-123',
+        directory: '/tmp/test-routing-autopilot',
+      };
+
+      const result = await processHook('autopilot', input);
+      expect(result.continue).toBe(true);
+
+      spy.mockRestore();
+    });
+
+    it('should handle autopilot without sessionId gracefully', async () => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const input: HookInput = {
+        directory: '/tmp/test-routing-autopilot',
+      };
+
+      const result = await processHook('autopilot', input);
+      expect(result.continue).toBe(true);
+
+      spy.mockRestore();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Unknown hook types still return continue:true
+  // --------------------------------------------------------------------------
+
+  describe('unknown hook types (regression)', () => {
+    it('should return continue:true for completely unknown hook type', async () => {
+      const input: HookInput = {
+        sessionId: 'test-session',
+        directory: '/tmp/test-routing',
+      };
+
+      const result = await processHook('totally-unknown-hook-xyz' as HookType, input);
+      expect(result).toEqual({ continue: true });
     });
   });
 });

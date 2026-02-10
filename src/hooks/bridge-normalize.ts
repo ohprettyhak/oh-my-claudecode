@@ -7,6 +7,7 @@
  * with snake_case-first fallback.
  *
  * Uses Zod for structural validation to catch malformed inputs early.
+ * Sensitive hooks use strict allowlists; others pass through unknown fields.
  */
 
 import { z } from 'zod';
@@ -75,6 +76,59 @@ interface RawHookInput {
   [key: string]: unknown;
 }
 
+// --- Security: Hook sensitivity classification ---
+
+/** Hooks where unknown fields are dropped (strict allowlist only) */
+const SENSITIVE_HOOKS = new Set([
+  'permission-request',
+  'setup-init',
+  'setup-maintenance',
+  'session-end',
+]);
+
+/** All known camelCase field names the system uses (post-normalization) */
+const KNOWN_FIELDS = new Set([
+  // Core normalized fields
+  'sessionId', 'toolName', 'toolInput', 'toolOutput', 'directory',
+  'prompt', 'message', 'parts', 'hookEventName',
+  // Stop hook fields
+  'stop_reason', 'stopReason', 'user_requested', 'userRequested',
+  // Permission hook fields
+  'permission_mode', 'tool_use_id', 'transcript_path',
+  // Subagent fields
+  'agent_id', 'agent_name', 'agent_type', 'parent_session_id',
+  // Common extra fields from Claude Code
+  'input', 'output', 'result', 'error', 'status',
+]);
+
+// --- Fast-path detection ---
+
+/** Typical camelCase keys that indicate already-normalized input */
+const CAMEL_CASE_MARKERS = new Set(['sessionId', 'toolName', 'directory']);
+
+/** Check if any key in the object contains an underscore (snake_case indicator) */
+function hasSnakeCaseKeys(obj: Record<string, unknown>): boolean {
+  for (const key of Object.keys(obj)) {
+    if (key.includes('_')) return true;
+  }
+  return false;
+}
+
+/** Check if input is already camelCase-normalized and can skip Zod parsing */
+function isAlreadyCamelCase(obj: Record<string, unknown>): boolean {
+  // Must have at least one camelCase marker key
+  let hasMarker = false;
+  for (const marker of CAMEL_CASE_MARKERS) {
+    if (marker in obj) {
+      hasMarker = true;
+      break;
+    }
+  }
+  if (!hasMarker) return false;
+  // Must have no snake_case keys
+  return !hasSnakeCaseKeys(obj);
+}
+
 /**
  * Normalize hook input from Claude Code's snake_case format to the
  * camelCase HookInput interface used internally.
@@ -82,10 +136,30 @@ interface RawHookInput {
  * Validates the input structure with Zod, then maps snake_case to camelCase.
  * Always reads snake_case first with camelCase fallback, per the
  * project convention documented in MEMORY.md.
+ *
+ * @param raw - Raw hook input (may be snake_case, camelCase, or mixed)
+ * @param hookType - Optional hook type for sensitivity-aware filtering
  */
-export function normalizeHookInput(raw: unknown): HookInput {
+export function normalizeHookInput(raw: unknown, hookType?: string): HookInput {
   if (typeof raw !== 'object' || raw === null) {
     return {};
+  }
+
+  const rawObj = raw as Record<string, unknown>;
+
+  // Fast path: if input is already camelCase, skip Zod parse entirely
+  if (isAlreadyCamelCase(rawObj)) {
+    return {
+      sessionId: rawObj.sessionId as string | undefined,
+      toolName: rawObj.toolName as string | undefined,
+      toolInput: rawObj.toolInput,
+      toolOutput: rawObj.toolOutput ?? rawObj.toolResponse,
+      directory: rawObj.directory as string | undefined,
+      prompt: rawObj.prompt as string | undefined,
+      message: rawObj.message as HookInput['message'],
+      parts: rawObj.parts as HookInput['parts'],
+      ...filterPassthrough(rawObj, hookType),
+    } as HookInput;
   }
 
   // Validate with Zod - use safeParse so malformed input doesn't throw
@@ -107,16 +181,18 @@ export function normalizeHookInput(raw: unknown): HookInput {
     prompt: input.prompt,
     message: input.message,
     parts: input.parts,
-    // Pass through any extra fields that specific hooks may need
-    ...passthrough(input),
+    // Pass through extra fields with sensitivity filtering
+    ...filterPassthrough(input, hookType),
   } as HookInput;
 }
 
 /**
- * Collect fields that don't have a normalization mapping,
- * so hook-specific fields (e.g. stop_reason, agent_id) pass through unchanged.
+ * Filter passthrough fields based on hook sensitivity.
+ *
+ * - Sensitive hooks: only allow KNOWN_FIELDS (drop everything else)
+ * - Other hooks: pass through unknown fields with a debug warning
  */
-function passthrough(input: RawHookInput): Record<string, unknown> {
+function filterPassthrough(input: Record<string, unknown>, hookType?: string): Record<string, unknown> {
   const MAPPED_KEYS = new Set([
     'tool_name', 'toolName',
     'tool_input', 'toolInput',
@@ -127,11 +203,28 @@ function passthrough(input: RawHookInput): Record<string, unknown> {
     'prompt', 'message', 'parts',
   ]);
 
+  const isSensitive = hookType != null && SENSITIVE_HOOKS.has(hookType);
   const extra: Record<string, unknown> = {};
+
   for (const [key, value] of Object.entries(input)) {
-    if (!MAPPED_KEYS.has(key) && value !== undefined) {
+    if (MAPPED_KEYS.has(key) || value === undefined) continue;
+
+    if (isSensitive) {
+      // Strict: only allow known fields
+      if (KNOWN_FIELDS.has(key)) {
+        extra[key] = value;
+      }
+      // Unknown fields silently dropped for sensitive hooks
+    } else {
+      // Conservative: pass through but warn on truly unknown fields
       extra[key] = value;
+      if (!KNOWN_FIELDS.has(key)) {
+        console.debug(`[bridge-normalize] Unknown field "${key}" passed through for hook "${hookType ?? 'unknown'}"`);
+      }
     }
   }
   return extra;
 }
+
+// --- Test helpers (exported for testing only) ---
+export { SENSITIVE_HOOKS, KNOWN_FIELDS, isAlreadyCamelCase, HookInputSchema };

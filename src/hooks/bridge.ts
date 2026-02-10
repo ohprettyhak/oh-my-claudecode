@@ -155,18 +155,47 @@ function getTeamStagePrompt(stage: string): string {
 }
 
 /**
+ * Returns the required camelCase keys for a given hook type.
+ * Centralizes key requirements to avoid drift between normalization and validation.
+ */
+export function requiredKeysForHook(hookType: string): string[] {
+  switch (hookType) {
+    case "session-end":
+    case "subagent-start":
+    case "subagent-stop":
+    case "pre-compact":
+    case "setup-init":
+    case "setup-maintenance":
+      return ["sessionId", "directory"];
+    case "permission-request":
+      return ["sessionId", "directory", "toolName"];
+    default:
+      return [];
+  }
+}
+
+/**
  * Validates that an input object contains all required fields.
  * Returns true if all required fields are present, false otherwise.
+ * Logs missing keys at debug level on failure.
  */
 function validateHookInput<T>(
   input: unknown,
   requiredFields: string[],
+  hookType?: string,
 ): input is T {
   if (typeof input !== "object" || input === null) return false;
   const obj = input as Record<string, unknown>;
-  return requiredFields.every(
-    (field) => field in obj && obj[field] !== undefined,
+  const missing = requiredFields.filter(
+    (field) => !(field in obj) || obj[field] === undefined,
   );
+  if (missing.length > 0) {
+    console.error(
+      `[hook-bridge] validateHookInput failed for "${hookType ?? "unknown"}": missing keys: ${missing.join(", ")}`,
+    );
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -795,7 +824,7 @@ async function processAutopilot(input: HookInput): Promise<HookOutput> {
   // Lazy-load autopilot module
   const { readAutopilotState, getPhasePrompt } = await import("./autopilot/index.js");
 
-  const state = readAutopilotState(directory);
+  const state = readAutopilotState(directory, input.sessionId);
 
   if (!state || !state.active) {
     return { continue: true };
@@ -859,7 +888,7 @@ export async function processHook(
   }
 
   // Normalize snake_case fields from Claude Code to camelCase
-  const input = normalizeHookInput(rawInput) as HookInput;
+  const input = normalizeHookInput(rawInput, hookType) as HookInput;
 
   try {
     switch (hookType) {
@@ -889,10 +918,7 @@ export async function processHook(
 
       // Lazy-loaded async hook types
       case "session-end": {
-        if (!validateHookInput<SessionEndInput>(input, ["session_id", "cwd"])) {
-          console.error(
-            "[hook-bridge] Invalid SessionEndInput - missing required fields",
-          );
+        if (!validateHookInput<SessionEndInput>(input, requiredKeysForHook("session-end"), "session-end")) {
           return { continue: true };
         }
         const { handleSessionEnd } = await import("./session-end/index.js");
@@ -901,11 +927,8 @@ export async function processHook(
 
       case "subagent-start": {
         if (
-          !validateHookInput<SubagentStartInput>(input, ["session_id", "cwd"])
+          !validateHookInput<SubagentStartInput>(input, requiredKeysForHook("subagent-start"), "subagent-start")
         ) {
-          console.error(
-            "[hook-bridge] Invalid SubagentStartInput - missing required fields",
-          );
           return { continue: true };
         }
         const { processSubagentStart } = await import("./subagent-tracker/index.js");
@@ -926,11 +949,8 @@ export async function processHook(
 
       case "subagent-stop": {
         if (
-          !validateHookInput<SubagentStopInput>(input, ["session_id", "cwd"])
+          !validateHookInput<SubagentStopInput>(input, requiredKeysForHook("subagent-stop"), "subagent-stop")
         ) {
-          console.error(
-            "[hook-bridge] Invalid SubagentStopInput - missing required fields",
-          );
           return { continue: true };
         }
         const { processSubagentStop } = await import("./subagent-tracker/index.js");
@@ -949,10 +969,7 @@ export async function processHook(
       }
 
       case "pre-compact": {
-        if (!validateHookInput<PreCompactInput>(input, ["session_id", "cwd"])) {
-          console.error(
-            "[hook-bridge] Invalid PreCompactInput - missing required fields",
-          );
+        if (!validateHookInput<PreCompactInput>(input, requiredKeysForHook("pre-compact"), "pre-compact")) {
           return { continue: true };
         }
         const { processPreCompact } = await import("./pre-compact/index.js");
@@ -961,10 +978,7 @@ export async function processHook(
 
       case "setup-init":
       case "setup-maintenance": {
-        if (!validateHookInput<SetupInput>(input, ["session_id", "cwd"])) {
-          console.error(
-            "[hook-bridge] Invalid SetupInput - missing required fields",
-          );
+        if (!validateHookInput<SetupInput>(input, requiredKeysForHook(hookType), hookType)) {
           return { continue: true };
         }
         const { processSetup } = await import("./setup/index.js");
@@ -977,15 +991,8 @@ export async function processHook(
 
       case "permission-request": {
         if (
-          !validateHookInput<PermissionRequestInput>(input, [
-            "session_id",
-            "cwd",
-            "tool_name",
-          ])
+          !validateHookInput<PermissionRequestInput>(input, requiredKeysForHook("permission-request"), "permission-request")
         ) {
-          console.error(
-            "[hook-bridge] Invalid PermissionRequestInput - missing required fields",
-          );
           return { continue: true };
         }
         const { handlePermissionRequest } = await import("./permission-handler/index.js");

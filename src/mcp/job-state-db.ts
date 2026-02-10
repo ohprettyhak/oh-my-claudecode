@@ -46,8 +46,13 @@ function getDb(cwd?: string): BetterSqlite3.Database | null {
     const resolved = resolve(cwd);
     return dbMap.get(resolved) ?? null;
   }
+  // Emit deprecation warning when multiple DBs are open and no cwd provided
+  if (dbMap.size > 1) {
+    console.warn('[job-state-db] DEPRECATED: getDb() called without explicit cwd while multiple DBs are open. Pass cwd explicitly.');
+  }
   // Backward compat: use last initialized cwd
   if (_lastCwd) {
+    console.warn('[job-state-db] DEPRECATED: using _lastCwd fallback. Pass cwd explicitly.');
     return dbMap.get(_lastCwd) ?? null;
   }
   // Return any available instance (single-worktree case)
@@ -214,6 +219,8 @@ export async function initJobDb(cwd: string): Promise<boolean> {
 /**
  * Close the database connection for a specific cwd, or all connections if no cwd provided.
  * Safe to call multiple times; no-ops if already closed.
+ *
+ * @deprecated When called without cwd, use closeAllJobDbs() instead for explicit intent.
  */
 export function closeJobDb(cwd?: string): void {
   if (cwd) {
@@ -225,6 +232,9 @@ export function closeJobDb(cwd?: string): void {
       if (_lastCwd === resolvedCwd) _lastCwd = null;
     }
   } else {
+    if (dbMap.size > 0) {
+      console.warn('[job-state-db] DEPRECATED: closeJobDb() called without cwd. Use closeAllJobDbs() for explicit intent.');
+    }
     // Close all connections
     for (const [key, db] of dbMap.entries()) {
       try { db.close(); } catch { /* Ignore close errors */ }
@@ -232,6 +242,18 @@ export function closeJobDb(cwd?: string): void {
     }
     _lastCwd = null;
   }
+}
+
+/**
+ * Explicitly close all open database connections.
+ * Preferred over calling closeJobDb() without arguments.
+ */
+export function closeAllJobDbs(): void {
+  for (const [key, db] of dbMap.entries()) {
+    try { db.close(); } catch { /* Ignore close errors */ }
+    dbMap.delete(key);
+  }
+  _lastCwd = null;
 }
 
 /**
