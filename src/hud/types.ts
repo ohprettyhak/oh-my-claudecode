@@ -27,6 +27,8 @@ export interface BackgroundTask {
 export interface OmcHudState {
   timestamp: string;
   backgroundTasks: BackgroundTask[];
+  /** Persisted session start time to survive tail-parsing resets */
+  sessionStartTimestamp?: string;
 }
 
 // ============================================================================

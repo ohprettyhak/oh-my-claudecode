@@ -12,6 +12,7 @@ import {
   readHudState,
   readHudConfig,
   getRunningTasks,
+  writeHudState,
   initializeHUDState,
 } from "./state.js";
 import {
@@ -342,6 +343,22 @@ async function main(): Promise<void> {
     const hudState = readHudState(cwd);
     const backgroundTasks = hudState?.backgroundTasks || [];
 
+    // Persist session start time to survive tail-parsing resets (#528)
+    // When tail parsing kicks in for large transcripts, sessionStart comes from
+    // the first entry in the tail chunk rather than the actual session start.
+    // We persist the real start time in HUD state on first observation.
+    let sessionStart = transcriptData.sessionStart;
+    if (hudState?.sessionStartTimestamp) {
+      // Use persisted value (the real session start)
+      sessionStart = new Date(hudState.sessionStartTimestamp);
+    } else if (sessionStart) {
+      // First time seeing session start - persist it
+      const stateToWrite = hudState || { timestamp: new Date().toISOString(), backgroundTasks: [] };
+      stateToWrite.sessionStartTimestamp = sessionStart.toISOString();
+      stateToWrite.timestamp = new Date().toISOString();
+      writeHudState(stateToWrite, cwd);
+    }
+
     // Fetch rate limits from OAuth API (if available)
     const rateLimits =
       config.elements.rateLimits !== false ? await getUsage() : null;
@@ -363,7 +380,7 @@ async function main(): Promise<void> {
       pendingPermission: transcriptData.pendingPermission || null,
       thinkingState: transcriptData.thinkingState || null,
       sessionHealth: await calculateSessionHealth(
-        transcriptData.sessionStart,
+        sessionStart,
         getContextPercent(stdin),
         stdin,
       ),
