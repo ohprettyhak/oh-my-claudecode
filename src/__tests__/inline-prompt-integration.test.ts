@@ -308,6 +308,28 @@ describe('Inline prompt edge cases', () => {
     expectNoMissingPromptError(text);
   });
 
+  it('prompt_file: null with valid prompt treats null as defined (file mode) for Codex', async () => {
+    const result = await handleAskCodex({
+      agent_role: 'architect',
+      prompt: 'test inline prompt',
+      prompt_file: null as any,
+      output_file: '/tmp/test-output.md',
+    });
+    expect(result.isError).toBe(true);
+    expectMissingPromptError(result.content[0].text);
+  });
+
+  it('prompt_file: null with valid prompt treats null as defined (file mode) for Gemini', async () => {
+    const result = await handleAskGemini({
+      agent_role: 'designer',
+      prompt: 'test inline prompt',
+      prompt_file: null as any,
+      output_file: '/tmp/test-output.md',
+    });
+    expect(result.isError).toBe(true);
+    expectMissingPromptError(result.content[0].text);
+  });
+
   it('rejects oversized inline prompts', async () => {
     const hugePrompt = 'x'.repeat(256 * 1024 + 1);
     const result = await handleAskCodex({

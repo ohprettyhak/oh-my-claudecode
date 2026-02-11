@@ -158,6 +158,10 @@ export function wrapUntrustedCliResponse(content: string, metadata: { source: st
   return `\n--- UNTRUSTED CLI RESPONSE (${metadata.tool}:${metadata.source}) ---\n${content}\n--- END UNTRUSTED CLI RESPONSE ---\n`;
 }
 
+export function singleErrorBlock(text: string): { content: [{ type: 'text'; text: string }]; isError: true } {
+  return { content: [{ type: 'text' as const, text }], isError: true as const };
+}
+
 /**
  * Build the full prompt with system prompt prepended.
  *
