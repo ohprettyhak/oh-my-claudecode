@@ -492,7 +492,7 @@ async function main() {
 
       if (newCount > maxReinforcements) {
         // Max reinforcements reached - allow stop
-        console.log(JSON.stringify({ continue: true }));
+        console.log(JSON.stringify({ continue: true, suppressOutput: true }));
         return;
       }
 
@@ -528,7 +528,7 @@ async function main() {
 
       if (newCount > maxReinforcements) {
         // Max reinforcements reached - allow stop
-        console.log(JSON.stringify({ continue: true }));
+        console.log(JSON.stringify({ continue: true, suppressOutput: true }));
         return;
       }
 
@@ -554,11 +554,11 @@ async function main() {
     }
 
     // No blocking needed
-    console.log(JSON.stringify({ continue: true }));
+    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
   } catch (error) {
     // On any error, allow stop rather than blocking forever
     console.error(`[persistent-mode] Error: ${error.message}`);
-    console.log(JSON.stringify({ continue: true }));
+    console.log(JSON.stringify({ continue: true, suppressOutput: true }));
   }
 }
 
