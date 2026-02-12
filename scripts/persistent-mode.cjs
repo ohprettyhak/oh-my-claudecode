@@ -609,7 +609,27 @@ async function main() {
       return;
     }
 
-    // No blocking needed
+    // No blocking needed — Claude is truly idle.
+    // Send session-idle notification (fire-and-forget) so external integrations
+    // (Telegram, Discord) know the session went idle without any active mode.
+    if (sessionId) {
+      try {
+        const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+        if (pluginRoot) {
+          const { pathToFileURL } = require('url');
+          import(pathToFileURL(join(pluginRoot, 'dist', 'notifications', 'index.js')).href)
+            .then(({ notify }) =>
+              notify('session-idle', {
+                sessionId,
+                projectPath: directory,
+              }).catch(() => {})
+            )
+            .catch(() => {});
+        }
+      } catch {
+        // Notification module not available, skip silently
+      }
+    }
     console.log(JSON.stringify({ continue: true, suppressOutput: true }));
   } catch (error) {
     // On any error, allow stop rather than blocking forever

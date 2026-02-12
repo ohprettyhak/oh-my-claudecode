@@ -54,7 +54,7 @@ export function getTeamMembers(teamName, workingDirectory) {
                     status = 'quarantined';
                 else if (heartbeat.status === 'executing')
                     status = 'active';
-                else if (heartbeat.status === 'polling')
+                else if (heartbeat.status === 'ready' || heartbeat.status === 'polling')
                     status = 'idle';
                 else
                     status = heartbeat.status;

@@ -45,7 +45,13 @@ export interface InstallOptions {
     skipClaudeCheck?: boolean;
     forceHooks?: boolean;
     refreshHooksInPlugin?: boolean;
+    skipHud?: boolean;
 }
+/**
+ * Read hudEnabled from .omc-config.json without importing auto-update
+ * (avoids circular dependency since auto-update imports from installer)
+ */
+export declare function isHudEnabledInConfig(): boolean;
 /**
  * Detect whether a hook command belongs to oh-my-claudecode.
  *

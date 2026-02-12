@@ -91,7 +91,7 @@ export interface HeartbeatData {
     lastPollAt: string;
     currentTaskId?: string;
     consecutiveErrors: number;
-    status: 'polling' | 'executing' | 'shutdown' | 'quarantined';
+    status: 'ready' | 'polling' | 'executing' | 'shutdown' | 'quarantined';
 }
 /** Offset cursor for JSONL consumption */
 export interface InboxCursor {

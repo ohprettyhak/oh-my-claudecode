@@ -78,6 +78,7 @@ export function getOMCConfig() {
             setupVersion: config.setupVersion,
             stopHookCallbacks: config.stopHookCallbacks,
             notifications: config.notifications,
+            hudEnabled: config.hudEnabled,
         };
     }
     catch {

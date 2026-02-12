@@ -94,6 +94,8 @@ export interface OMCConfig {
     stopHookCallbacks?: StopHookCallbacksConfig;
     /** Multi-platform lifecycle notification configuration */
     notifications?: NotificationConfig;
+    /** Whether HUD statusline is enabled (default: true). Set to false to skip HUD installation. */
+    hudEnabled?: boolean;
 }
 /**
  * Read the OMC configuration

@@ -1088,11 +1088,13 @@ async function runBridge(config) {
       writeHeartbeat(workingDirectory, buildHeartbeat(config, "polling", null, consecutiveErrors));
       if (!readyEmitted) {
         try {
+          writeHeartbeat(workingDirectory, buildHeartbeat(config, "ready", null, 0));
           appendOutbox(teamName, workerName, {
             type: "ready",
             message: `Worker ${workerName} is ready (${provider})`,
             timestamp: (/* @__PURE__ */ new Date()).toISOString()
           });
+          audit(config, "worker_ready");
           readyEmitted = true;
         } catch (err) {
           audit(config, "bridge_start", void 0, { warning: "startup_write_failed", error: String(err) });

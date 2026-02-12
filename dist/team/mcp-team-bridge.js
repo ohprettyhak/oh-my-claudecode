@@ -476,11 +476,15 @@ export async function runBridge(config) {
             // Emit ready after first successful heartbeat write in poll loop
             if (!readyEmitted) {
                 try {
+                    // Write ready heartbeat so status-based monitoring detects the transition
+                    writeHeartbeat(workingDirectory, buildHeartbeat(config, 'ready', null, 0));
                     appendOutbox(teamName, workerName, {
                         type: 'ready',
                         message: `Worker ${workerName} is ready (${provider})`,
                         timestamp: new Date().toISOString(),
                     });
+                    // Emit worker_ready audit event for activity-log / hook consumers
+                    audit(config, 'worker_ready');
                     readyEmitted = true;
                 }
                 catch (err) {

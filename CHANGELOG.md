@@ -1,3 +1,24 @@
+# oh-my-claudecode v4.2.4: Session Idle Notifications
+
+Session-idle notifications now fire when Claude stops without any active persistent mode, closing the gap where external integrations (Telegram, Discord) were never informed that a session went idle.
+
+**4 files changed across 3 PRs (#588-#592)**
+
+---
+
+### Fixed
+
+- **Session-idle notification never fired on ordinary stop** (#593): The `persistent-mode.cjs` Stop hook only sent notifications when a persistent mode (ralph, ultrawork, etc.) was active. When Claude stopped normally with no mode running, no `session-idle` event was emitted. External integrations (Telegram, Discord) now receive idle notifications so users know their session is waiting for input.
+
+### Changed
+
+- **Skills cleanup**: Removed deprecated `commands/` stubs and added missing `SKILL.md` files (#588).
+- **HUD installation optional**: Installer now respects `hudEnabled` config, skipping HUD setup when disabled (#567).
+- **Team status hooks**: Emit status hooks on tmux session ready transition (#572).
+- **Explore agent context**: Added context-aware file reading to explore agent (#583).
+
+---
+
 # oh-my-claudecode v4.2.3: Stability & Cross-Platform Fixes
 
 Bug fixes and reliability improvements across worktree state management, Codex rate limiting, session metrics, keyword detection, and cross-platform compatibility.
