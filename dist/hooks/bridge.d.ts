@@ -61,6 +61,16 @@ export interface HookOutput {
  */
 export type HookType = "keyword-detector" | "stop-continuation" | "ralph" | "persistent-mode" | "session-start" | "session-end" | "pre-tool-use" | "post-tool-use" | "autopilot" | "subagent-start" | "subagent-stop" | "pre-compact" | "setup-init" | "setup-maintenance" | "permission-request";
 /**
+ * Fire-and-forget notification for AskUserQuestion (issue #597).
+ * Extracted for testability; the dynamic import makes direct assertion
+ * on the notify() call timing-sensitive, so tests spy on this wrapper instead.
+ */
+export declare function dispatchAskUserQuestionNotification(sessionId: string, directory: string, toolInput: unknown): void;
+/** @internal Object wrapper so tests can spy on the dispatch call. */
+export declare const _notify: {
+    askUserQuestion: typeof dispatchAskUserQuestionNotification;
+};
+/**
  * Reset the skip hooks cache (for testing only)
  */
 export declare function resetSkipHooksCache(): void;

@@ -79,6 +79,24 @@ export function isHudEnabledInConfig() {
     }
 }
 /**
+ * Detect whether a statusLine config belongs to oh-my-claudecode.
+ *
+ * Checks the command string for known OMC HUD paths so that custom
+ * (non-OMC) statusLine configurations are preserved during forced
+ * updates/reconciliation.
+ *
+ * @param statusLine - The statusLine setting object from settings.json
+ * @returns true if the statusLine was set by OMC
+ */
+export function isOmcStatusLine(statusLine) {
+    if (!statusLine || typeof statusLine !== 'object')
+        return false;
+    const sl = statusLine;
+    if (typeof sl.command !== 'string')
+        return false;
+    return sl.command.includes('omc-hud');
+}
+/**
  * Known OMC hook script filenames installed into .claude/hooks/.
  * Must be kept in sync with getHookScripts() in hooks.ts and
  * HOOKS_SETTINGS_CONFIG_NODE command entries.
@@ -230,14 +248,17 @@ function loadAgentDefinitions() {
 }
 /**
  * Load command definitions from /commands/*.md files
+ *
+ * NOTE: The commands/ directory was removed in v4.1.16 (#582).
+ * All commands are now plugin-scoped skills. This function returns
+ * an empty object for backward compatibility.
  */
 function loadCommandDefinitions() {
     const commandsDir = join(getPackageDir(), 'commands');
-    const definitions = {};
     if (!existsSync(commandsDir)) {
-        console.error(`FATAL: commands directory not found: ${commandsDir}`);
-        process.exit(1);
+        return {};
     }
+    const definitions = {};
     for (const file of readdirSync(commandsDir)) {
         if (file.endsWith('.md')) {
             definitions[file] = readFileSync(join(commandsDir, file), 'utf-8');
@@ -372,9 +393,7 @@ export function install(options = {}) {
             if (!existsSync(AGENTS_DIR)) {
                 mkdirSync(AGENTS_DIR, { recursive: true });
             }
-            if (!existsSync(COMMANDS_DIR)) {
-                mkdirSync(COMMANDS_DIR, { recursive: true });
-            }
+            // NOTE: COMMANDS_DIR creation removed - commands/ deprecated in v4.1.16 (#582)
             if (!existsSync(SKILLS_DIR)) {
                 mkdirSync(SKILLS_DIR, { recursive: true });
             }
@@ -696,12 +715,15 @@ export function install(options = {}) {
                         };
                         log('  Configured statusLine');
                     }
-                    else if (options.force) {
+                    else if (options.force && isOmcStatusLine(existingSettings.statusLine)) {
                         existingSettings.statusLine = {
                             type: 'command',
                             command: 'node ' + hudScriptPath
                         };
                         log('  Updated statusLine (--force)');
+                    }
+                    else if (options.force) {
+                        log('  statusLine owned by another tool, preserving (use manual edit to override)');
                     }
                     else {
                         log('  statusLine already configured, skipping (use --force to override)');
@@ -744,7 +766,7 @@ export function install(options = {}) {
  * Check if OMC is already installed
  */
 export function isInstalled() {
-    return existsSync(VERSION_FILE) && existsSync(AGENTS_DIR) && existsSync(COMMANDS_DIR);
+    return existsSync(VERSION_FILE) && existsSync(AGENTS_DIR);
 }
 /**
  * Get installation info
