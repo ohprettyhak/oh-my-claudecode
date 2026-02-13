@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { isSafeCommand, isActiveModeRunning, processPermissionRequest } from '../index.js';
+import { isSafeCommand, isHeredocWithSafeBase, isActiveModeRunning, processPermissionRequest } from '../index.js';
 import type { PermissionRequestInput } from '../index.js';
 
 describe('permission-handler', () => {
@@ -166,6 +166,98 @@ describe('permission-handler', () => {
     it('should handle whitespace correctly', () => {
       expect(isSafeCommand('  git status  ')).toBe(true);
       expect(isSafeCommand('  git status; rm -rf /  ')).toBe(false);
+    });
+  });
+
+  describe('isHeredocWithSafeBase (Issue #608)', () => {
+    describe('should detect and allow safe heredoc commands', () => {
+      const safeCases = [
+        {
+          desc: 'git commit with HEREDOC message',
+          cmd: `git commit -m "$(cat <<'EOF'\nCommit message here.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n)"`,
+        },
+        {
+          desc: 'git commit with unquoted EOF delimiter',
+          cmd: `git commit -m "$(cat <<EOF\nSome commit message\nEOF\n)"`,
+        },
+        {
+          desc: 'git commit with double-quoted delimiter',
+          cmd: `git commit -m "$(cat <<"EOF"\nMessage body\nEOF\n)"`,
+        },
+        {
+          desc: 'git commit with long multi-line message',
+          cmd: `git commit -m "$(cat <<'EOF'\nfeat: add authentication module\n\nThis adds OAuth2 support with:\n- Google provider\n- GitHub provider\n- Session management\n\nCloses #123\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n)"`,
+        },
+        {
+          desc: 'git commit --amend with heredoc',
+          cmd: `git commit --amend -m "$(cat <<'EOF'\nUpdated message\nEOF\n)"`,
+        },
+        {
+          desc: 'git tag with heredoc annotation',
+          cmd: `git tag -a v1.0.0 -m "$(cat <<'EOF'\nRelease v1.0.0\n\nChangelog:\n- Feature A\n- Fix B\nEOF\n)"`,
+        },
+        {
+          desc: 'git commit with <<- (strip tabs) heredoc',
+          cmd: `git commit -m "$(cat <<-'EOF'\n\tIndented message\nEOF\n)"`,
+        },
+      ];
+
+      safeCases.forEach(({ desc, cmd }) => {
+        it(`should return true for: ${desc}`, () => {
+          expect(isHeredocWithSafeBase(cmd)).toBe(true);
+        });
+      });
+    });
+
+    describe('should reject unsafe or non-heredoc commands', () => {
+      const unsafeCases = [
+        {
+          desc: 'single-line command (no heredoc body)',
+          cmd: 'git commit -m "simple message"',
+        },
+        {
+          desc: 'single-line with << but no newlines',
+          cmd: "git commit -m \"$(cat <<'EOF' EOF)\"",
+        },
+        {
+          desc: 'curl with heredoc (unsafe base)',
+          cmd: `curl -X POST http://example.com << 'EOF'\n{"key":"value"}\nEOF`,
+        },
+        {
+          desc: 'rm command with heredoc-like content',
+          cmd: `rm -rf /tmp/files << 'EOF'\nfile1\nfile2\nEOF`,
+        },
+        {
+          desc: 'cat with heredoc writing to file (unsafe)',
+          cmd: `cat > /etc/passwd << 'EOF'\nmalicious content\nEOF`,
+        },
+        {
+          desc: 'multi-line command without heredoc operator',
+          cmd: 'git status\nrm -rf /',
+        },
+        {
+          desc: 'echo with heredoc (not in safe list)',
+          cmd: `echo << 'EOF'\nHello world\nEOF`,
+        },
+        {
+          desc: 'python with heredoc stdin',
+          cmd: `python3 << 'EOF'\nimport os\nos.system("whoami")\nEOF`,
+        },
+        {
+          desc: 'empty command',
+          cmd: '',
+        },
+        {
+          desc: 'whitespace only',
+          cmd: '   \n   ',
+        },
+      ];
+
+      unsafeCases.forEach(({ desc, cmd }) => {
+        it(`should return false for: ${desc}`, () => {
+          expect(isHeredocWithSafeBase(cmd)).toBe(false);
+        });
+      });
     });
   });
 
@@ -343,6 +435,50 @@ describe('permission-handler', () => {
         input.tool_input.command = 123 as any;
         const result = processPermissionRequest(input);
         expect(result.continue).toBe(true);
+      });
+    });
+
+    describe('heredoc command handling (Issue #608)', () => {
+      it('should auto-allow git commit with heredoc message', () => {
+        const cmd = `git commit -m "$(cat <<'EOF'\nfeat: add new feature\n\nDetailed description here.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n)"`;
+        const result = processPermissionRequest(createInput(cmd));
+        expect(result.continue).toBe(true);
+        expect(result.hookSpecificOutput?.decision?.behavior).toBe('allow');
+        expect(result.hookSpecificOutput?.decision?.reason).toContain('heredoc');
+      });
+
+      it('should auto-allow git tag with heredoc annotation', () => {
+        const cmd = `git tag -a v1.0.0 -m "$(cat <<'EOF'\nRelease v1.0.0\nEOF\n)"`;
+        const result = processPermissionRequest(createInput(cmd));
+        expect(result.continue).toBe(true);
+        expect(result.hookSpecificOutput?.decision?.behavior).toBe('allow');
+      });
+
+      it('should NOT auto-allow unsafe heredoc commands', () => {
+        const cmd = `curl -X POST http://example.com << 'EOF'\n{"data":"value"}\nEOF`;
+        const result = processPermissionRequest(createInput(cmd));
+        expect(result.continue).toBe(true);
+        expect(result.hookSpecificOutput?.decision?.behavior).not.toBe('allow');
+      });
+
+      it('should NOT auto-allow cat heredoc writing to files', () => {
+        const cmd = `cat > sensitive-file.txt << 'EOF'\nmalicious content\nEOF`;
+        const result = processPermissionRequest(createInput(cmd));
+        expect(result.continue).toBe(true);
+        expect(result.hookSpecificOutput?.decision?.behavior).not.toBe('allow');
+      });
+
+      it('should still auto-allow normal safe commands (no regression)', () => {
+        const result = processPermissionRequest(createInput('git status'));
+        expect(result.continue).toBe(true);
+        expect(result.hookSpecificOutput?.decision?.behavior).toBe('allow');
+        expect(result.hookSpecificOutput?.decision?.reason).toContain('Safe');
+      });
+
+      it('should still reject shell injection (no regression)', () => {
+        const result = processPermissionRequest(createInput('git status; rm -rf /'));
+        expect(result.continue).toBe(true);
+        expect(result.hookSpecificOutput?.decision?.behavior).not.toBe('allow');
       });
     });
   });

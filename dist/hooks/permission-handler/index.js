@@ -19,6 +19,17 @@ const SAFE_PATTERNS = [
 // Note: Quotes ("') intentionally excluded - they're needed for paths with spaces
 // and command substitution is already caught by $ detection
 const DANGEROUS_SHELL_CHARS = /[;&|`$()<>\n\r\t\0\\{}\[\]*?~!#]/;
+// Heredoc operator detection (<<, <<-, <<~, with optional quoting of delimiter)
+const HEREDOC_PATTERN = /<<[-~]?\s*['"]?\w+['"]?/;
+/**
+ * Patterns that are safe to auto-allow even when they contain heredoc content.
+ * Matched against the first line of the command (before the heredoc body).
+ * Issue #608: Prevents full heredoc body from being stored in settings.local.json.
+ */
+const SAFE_HEREDOC_PATTERNS = [
+    /^git commit\b/,
+    /^git tag\b/,
+];
 /**
  * Check if a command matches safe patterns
  */
@@ -30,6 +41,32 @@ export function isSafeCommand(command) {
         return false;
     }
     return SAFE_PATTERNS.some(pattern => pattern.test(trimmed));
+}
+/**
+ * Check if a command is a heredoc command with a safe base command.
+ * Issue #608: Heredoc commands contain shell metacharacters (<<, \n, $, etc.)
+ * that cause isSafeCommand() to reject them. When they fall through to Claude
+ * Code's native permission flow and the user approves "Always allow", the entire
+ * heredoc body (potentially hundreds of lines) gets stored in settings.local.json.
+ *
+ * This function detects heredoc commands and checks whether the base command
+ * (first line) matches known-safe patterns, allowing auto-approval without
+ * polluting settings.local.json.
+ */
+export function isHeredocWithSafeBase(command) {
+    const trimmed = command.trim();
+    // Heredoc commands from Claude Code are always multi-line
+    if (!trimmed.includes('\n')) {
+        return false;
+    }
+    // Must contain a heredoc operator
+    if (!HEREDOC_PATTERN.test(trimmed)) {
+        return false;
+    }
+    // Extract the first line as the base command
+    const firstLine = trimmed.split('\n')[0].trim();
+    // Check if the first line starts with a safe pattern
+    return SAFE_HEREDOC_PATTERNS.some(pattern => pattern.test(firstLine));
 }
 /**
  * Check if an active mode (autopilot/ultrawork/ralph/swarm) is running
@@ -93,6 +130,20 @@ export function processPermissionRequest(input) {
                 decision: {
                     behavior: 'allow',
                     reason: 'Safe read-only or test command',
+                },
+            },
+        };
+    }
+    // Auto-allow heredoc commands with safe base commands (Issue #608)
+    // This prevents the full heredoc body from being stored in settings.local.json
+    if (isHeredocWithSafeBase(command)) {
+        return {
+            continue: true,
+            hookSpecificOutput: {
+                hookEventName: 'PermissionRequest',
+                decision: {
+                    behavior: 'allow',
+                    reason: 'Safe command with heredoc content',
                 },
             },
         };
