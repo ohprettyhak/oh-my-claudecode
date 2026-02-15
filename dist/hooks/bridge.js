@@ -22,7 +22,6 @@ import { processOrchestratorPreTool, processOrchestratorPostTool } from "./omc-o
 import { normalizeHookInput } from "./bridge-normalize.js";
 import { addBackgroundTask, getRunningTaskCount, } from "../hud/background-tasks.js";
 import { loadConfig } from "../config/loader.js";
-import { isLowTierAgentsEnabled } from "../features/auto-update.js";
 import { ULTRAWORK_MESSAGE, ULTRATHINK_MESSAGE, SEARCH_MESSAGE, ANALYZE_MESSAGE, RALPH_MESSAGE, } from "../installer/hooks.js";
 // Agent dashboard is used in pre/post-tool-use hot path
 import { getAgentDashboard, } from "./subagent-tracker/index.js";
@@ -30,13 +29,6 @@ import { getAgentDashboard, } from "./subagent-tracker/index.js";
 import { recordFileTouch, } from "./subagent-tracker/session-replay.js";
 const PKILL_F_FLAG_PATTERN = /\bpkill\b.*\s-f\b/;
 const PKILL_FULL_FLAG_PATTERN = /\bpkill\b.*--full\b/;
-const LOW_TIER_AGENT_REWRITES = {
-    'architect-low': 'architect',
-    'executor-low': 'executor',
-    'designer-low': 'designer',
-    'security-reviewer-low': 'security-reviewer',
-    'tdd-guide-low': 'tdd-guide',
-};
 const TEAM_TERMINAL_VALUES = new Set([
     "completed",
     "complete",
@@ -553,8 +545,6 @@ function processPreToolUse(input) {
             message: enforcementResult.message,
         };
     }
-    const lowTierRewrite = rewriteLowTierAgentInput(input.toolName, input.toolInput);
-    const effectiveToolInput = lowTierRewrite.modifiedInput ?? input.toolInput;
     // Notify when AskUserQuestion is about to execute (issue #597)
     // Fire-and-forget: notify users that input is needed BEFORE the tool blocks
     if (input.toolName === "AskUserQuestion" && input.sessionId) {
@@ -581,7 +571,7 @@ function processPreToolUse(input) {
     // Background process guard - prevent forkbomb (issue #302)
     // Block new background tasks if limit is exceeded
     if (input.toolName === "Task" || input.toolName === "Bash") {
-        const toolInput = effectiveToolInput;
+        const toolInput = input.toolInput;
         if (toolInput?.run_in_background) {
             const config = loadConfig();
             const maxBgTasks = config.permissions?.maxBackgroundTasks ?? 5;
@@ -598,7 +588,7 @@ function processPreToolUse(input) {
     }
     // Track Task tool invocations for HUD background tasks display
     if (input.toolName === "Task") {
-        const toolInput = effectiveToolInput;
+        const toolInput = input.toolInput;
         if (toolInput?.description) {
             const taskId = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             addBackgroundTask(taskId, toolInput.description, toolInput.subagent_type, directory);

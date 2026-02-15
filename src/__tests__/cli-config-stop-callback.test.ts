@@ -65,7 +65,6 @@ describe('omc config-stop-callback tag options', () => {
 
     writeFileSync(configPath, JSON.stringify({
       silentAutoUpdate: false,
-      defaultExecutionMode: 'ecomode',
       taskTool: 'task',
       stopHookCallbacks: {
         telegram: {
@@ -81,7 +80,6 @@ describe('omc config-stop-callback tag options', () => {
     expect(replace.status).toBe(0);
 
     let config = readConfig(configPath);
-    expect(config.defaultExecutionMode).toBe('ecomode');
     expect(config.taskTool).toBe('task');
     expect(config.stopHookCallbacks?.telegram?.tagList).toEqual(['@alice', 'bob']);
 

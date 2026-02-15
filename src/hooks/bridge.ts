@@ -27,7 +27,6 @@ import {
   getRunningTaskCount,
 } from "../hud/background-tasks.js";
 import { loadConfig } from "../config/loader.js";
-import { isLowTierAgentsEnabled } from "../features/auto-update.js";
 import {
   ULTRAWORK_MESSAGE,
   ULTRATHINK_MESSAGE,
@@ -55,13 +54,6 @@ import type { StopContext } from "./todo-continuation/index.js";
 
 const PKILL_F_FLAG_PATTERN = /\bpkill\b.*\s-f\b/;
 const PKILL_FULL_FLAG_PATTERN = /\bpkill\b.*--full\b/;
-const LOW_TIER_AGENT_REWRITES: Record<string, string> = {
-  'architect-low': 'architect',
-  'executor-low': 'executor',
-  'designer-low': 'designer',
-  'security-reviewer-low': 'security-reviewer',
-  'tdd-guide-low': 'tdd-guide',
-};
 
 const TEAM_TERMINAL_VALUES = new Set([
   "completed",
@@ -351,7 +343,6 @@ async function processKeywordDetector(input: HookInput): Promise<HookOutput> {
       case "cancel":
       case "autopilot":
       case "team":
-      case "ecomode":
       case "pipeline":
       case "ralplan":
       case "plan":
@@ -762,9 +753,6 @@ function processPreToolUse(input: HookInput): HookOutput {
     };
   }
 
-  const lowTierRewrite = rewriteLowTierAgentInput(input.toolName, input.toolInput);
-  const effectiveToolInput = lowTierRewrite.modifiedInput ?? input.toolInput;
-
   // Notify when AskUserQuestion is about to execute (issue #597)
   // Fire-and-forget: notify users that input is needed BEFORE the tool blocks
   if (input.toolName === "AskUserQuestion" && input.sessionId) {
@@ -795,7 +783,7 @@ function processPreToolUse(input: HookInput): HookOutput {
   // Background process guard - prevent forkbomb (issue #302)
   // Block new background tasks if limit is exceeded
   if (input.toolName === "Task" || input.toolName === "Bash") {
-    const toolInput = effectiveToolInput as
+    const toolInput = input.toolInput as
       | {
           description?: string;
           subagent_type?: string;
@@ -823,7 +811,7 @@ function processPreToolUse(input: HookInput): HookOutput {
 
   // Track Task tool invocations for HUD background tasks display
   if (input.toolName === "Task") {
-    const toolInput = effectiveToolInput as
+    const toolInput = input.toolInput as
       | {
           description?: string;
           subagent_type?: string;
@@ -861,84 +849,22 @@ function processPreToolUse(input: HookInput): HookOutput {
   if (input.toolName === "Task") {
     const dashboard = getAgentDashboard(directory);
     if (dashboard) {
-      const messageParts = [enforcementResult.message, lowTierRewrite.message].filter(
-        (part): part is string => typeof part === "string" && part.length > 0,
-      );
-      const baseMessage = messageParts.join("\n\n");
-      const combined = baseMessage
-        ? `${baseMessage}\n\n${dashboard}`
+      const combined = enforcementResult.message
+        ? `${enforcementResult.message}\n\n${dashboard}`
         : dashboard;
       return {
         continue: true,
         message: combined,
-        ...(lowTierRewrite.modifiedInput !== undefined
-          ? { modifiedInput: lowTierRewrite.modifiedInput }
-          : {}),
       };
     }
   }
 
-  const messageParts = [enforcementResult.message, lowTierRewrite.message].filter(
-    (part): part is string => typeof part === "string" && part.length > 0,
-  );
   return {
     continue: true,
-    ...(messageParts.length > 0 ? { message: messageParts.join("\n\n") } : {}),
-    ...(lowTierRewrite.modifiedInput !== undefined
-      ? { modifiedInput: lowTierRewrite.modifiedInput }
-      : {}),
+    ...(enforcementResult.message ? { message: enforcementResult.message } : {}),
   };
 }
 
-function rewriteLowTierAgentInput(
-  toolName?: string,
-  toolInput?: unknown,
-): { modifiedInput?: unknown; message?: string } {
-  if (!toolName || (toolName !== "Task" && toolName !== "Agent")) {
-    return {};
-  }
-
-  if (isLowTierAgentsEnabled()) {
-    return {};
-  }
-
-  if (!toolInput || typeof toolInput !== "object") {
-    return {};
-  }
-
-  const input = toolInput as Record<string, unknown>;
-  const rawSubagent = input.subagent_type;
-  if (typeof rawSubagent !== "string" || rawSubagent.length === 0) {
-    return {};
-  }
-
-  const hasPrefix = rawSubagent.startsWith("oh-my-claudecode:");
-  const normalized = rawSubagent.replace(/^oh-my-claudecode:/, "");
-  const rewrittenBase = LOW_TIER_AGENT_REWRITES[normalized];
-  if (!rewrittenBase) {
-    return {};
-  }
-
-  const rewrittenSubagent = hasPrefix ? `oh-my-claudecode:${rewrittenBase}` : rewrittenBase;
-  const modifiedInput: Record<string, unknown> = {
-    ...input,
-    subagent_type: rewrittenSubagent,
-  };
-
-  let modelUpgradeNote = "";
-  if (input.model === "haiku") {
-    modifiedInput.model = "sonnet";
-    modelUpgradeNote = " and model=haiku -> sonnet";
-  }
-
-  return {
-    modifiedInput,
-    message:
-      process.env.OMC_DEBUG === "true"
-        ? `Low-tier agents disabled via config: rewrote ${rawSubagent} -> ${rewrittenSubagent}${modelUpgradeNote}.`
-        : undefined,
-  };
-}
 
 /**
  * Process post-tool-use hook

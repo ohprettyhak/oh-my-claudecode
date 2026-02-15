@@ -68,7 +68,6 @@ function getModesUsed(directory: string): string[] {
     { file: 'ultrapilot-state.json', mode: 'ultrapilot' },
     { file: 'ralph-state.json', mode: 'ralph' },
     { file: 'ultrawork-state.json', mode: 'ultrawork' },
-    { file: 'ecomode-state.json', mode: 'ecomode' },
     { file: 'swarm-state.json', mode: 'swarm' },
     { file: 'pipeline-state.json', mode: 'pipeline' },
   ];
@@ -260,7 +259,6 @@ const MODE_STATE_FILES = [
   { file: 'ultrapilot-state.json', mode: 'ultrapilot' },
   { file: 'ralph-state.json', mode: 'ralph' },
   { file: 'ultrawork-state.json', mode: 'ultrawork' },
-  { file: 'ecomode-state.json', mode: 'ecomode' },
   { file: 'ultraqa-state.json', mode: 'ultraqa' },
   { file: 'pipeline-state.json', mode: 'pipeline' },
   // Swarm uses marker file + SQLite

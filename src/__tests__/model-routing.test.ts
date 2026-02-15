@@ -1,8 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-vi.mock('../features/auto-update.js', () => ({
-  isLowTierAgentsEnabled: vi.fn(() => true),
-}));
-import { isLowTierAgentsEnabled } from '../features/auto-update.js';
 import {
   extractLexicalSignals,
   extractStructuralSignals,
@@ -35,8 +31,6 @@ import type {
   RoutingContext,
   ComplexitySignals,
 } from '../features/model-routing/types.js';
-
-const mockedIsLowTierAgentsEnabled = vi.mocked(isLowTierAgentsEnabled);
 
 // ============ Signal Extraction Tests ============
 
@@ -642,9 +636,6 @@ describe('Routing Rules', () => {
 // ============ Router Tests ============
 
 describe('Router', () => {
-  beforeEach(() => {
-    mockedIsLowTierAgentsEnabled.mockReturnValue(true);
-  });
 
   describe('routeTask', () => {
     it('should route simple task to LOW tier', () => {
@@ -734,17 +725,6 @@ describe('Router', () => {
       expect(decision.reasons.join(' ')).toContain('Min tier enforced');
     });
 
-    it('should clamp LOW tier to MEDIUM when low-tier agents are disabled in config', () => {
-      mockedIsLowTierAgentsEnabled.mockReturnValue(false);
-      const context: RoutingContext = {
-        taskPrompt: 'Find the config file',
-      };
-      const decision = routeTask(context);
-
-      expect(decision.tier).toBe('MEDIUM');
-      expect(decision.modelType).toBe('sonnet');
-      expect(decision.reasons.join(' ')).toContain('Min tier enforced');
-    });
   });
 
   describe('escalateModel', () => {

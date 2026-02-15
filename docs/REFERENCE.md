@@ -233,7 +233,7 @@ Always use `oh-my-claudecode:` prefix when calling via Task tool.
 | `ultrapilot` | Parallel autopilot with 3-5x speedup | `/oh-my-claudecode:ultrapilot` |
 | `swarm` | N coordinated agents with task claiming | `/oh-my-claudecode:swarm` |
 | `pipeline` | Sequential agent chaining | `/oh-my-claudecode:pipeline` |
-| `ecomode` | Token-efficient parallel execution | `/oh-my-claudecode:ecomode` |
+| `` | Token-efficient parallel execution | `/oh-my-claudecode:` |
 | `ralph` | Self-referential development until completion | `/oh-my-claudecode:ralph` |
 | `ralph-init` | Initialize PRD for structured task tracking | `/oh-my-claudecode:ralph-init` |
 | `ultraqa` | Autonomous QA cycling workflow | `/oh-my-claudecode:ultraqa` |
@@ -287,7 +287,7 @@ All skills are available as slash commands with the prefix `/oh-my-claudecode:`.
 | `/oh-my-claudecode:ultrapilot <task>` | Parallel autopilot (3-5x faster) |
 | `/oh-my-claudecode:swarm <N>:<agent> <task>` | Coordinated agent swarm |
 | `/oh-my-claudecode:pipeline <stages>` | Sequential agent chaining |
-| `/oh-my-claudecode:ecomode <task>` | Token-efficient parallel execution |
+| `/oh-my-claudecode: <task>` | Token-efficient parallel execution |
 | `/oh-my-claudecode:ralph-init <task>` | Initialize PRD for structured task tracking |
 | `/oh-my-claudecode:ralph <task>` | Self-referential loop until task completion |
 | `/oh-my-claudecode:ultraqa <goal>` | Autonomous QA cycling workflow |
@@ -325,7 +325,7 @@ Oh-my-claudecode includes 31 lifecycle hooks that enhance Claude Code's behavior
 | `ultrapilot` | Parallel autopilot with file ownership |
 | `ultraqa` | QA cycling until goal met |
 | `swarm` | Coordinated multi-agent with SQLite task claiming |
-| `mode-registry` | Tracks active execution mode (incl. ecomode) |
+| `mode-registry` | Tracks active execution mode (incl. ) |
 | `persistent-mode` | Maintains mode state across sessions |
 
 ### Core Hooks
@@ -380,7 +380,7 @@ Just include these words anywhere in your prompt to activate enhanced modes:
 | Keyword | Effect |
 |---------|--------|
 | `ultrawork`, `ulw`, `uw` | Activates parallel agent orchestration |
-| `ecomode`, `eco`, `efficient`, `save-tokens`, `budget` | Token-efficient parallel execution |
+| ``, `eco`, `efficient`, `save-tokens`, `budget` | Token-efficient parallel execution |
 | `autopilot`, `build me`, `I want a` | Full autonomous execution |
 | `ultrapilot`, `parallel build`, `swarm build` | Parallel autopilot (3-5x faster) |
 | `ralph`, `don't stop`, `must complete` | Persistence until verified complete |
@@ -692,7 +692,7 @@ Available presets: `minimal`, `focused`, `full`, `dense`, `analytics`, `opencode
 | Hooks not executing | Check hook permissions: `chmod +x ~/.claude/hooks/**/*.sh` |
 | Agents not delegating | Verify CLAUDE.md is loaded: check `./.claude/CLAUDE.md` or `~/.claude/CLAUDE.md` |
 | LSP tools not working | Install language servers: `npm install -g typescript-language-server` |
-| Token limit errors | Use `/oh-my-claudecode:ecomode` for token-efficient execution |
+| Token limit errors | Use `/oh-my-claudecode:` for token-efficient execution |
 
 ### Auto-Update
 

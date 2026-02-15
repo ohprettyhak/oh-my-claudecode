@@ -117,7 +117,7 @@ Smart cancellation that auto-detects active mode.
 
 **Usage:** `/cancel` or just say "cancelomc", "stopomc"
 
-Auto-detects and cancels: autopilot, ultrapilot, ralph, ultrawork, ultraqa, ecomode, swarm, pipeline
+Auto-detects and cancels: autopilot, ultrapilot, ralph, ultrawork, ultraqa, swarm, pipeline
 Use `--force` or `--all` to clear ALL states.
 
 ## Verification Module (v3.4)
@@ -143,7 +143,7 @@ Standardized state file locations.
 | autopilot | `autopilot-state.json` |
 | ultrapilot | `ultrapilot-state.json` |
 | ultrawork | `ultrawork-state.json` |
-| ecomode | `ecomode-state.json` |
+|  | `-state.json` |
 | ultraqa | `ultraqa-state.json` |
 | pipeline | `pipeline-state.json` |
 | swarm | `swarm-summary.json` + `swarm-active.marker` |

@@ -125,18 +125,6 @@ export interface OMCConfig {
     /** Inject usage instructions at session start (default: true) */
     injectInstructions?: boolean;
   };
-  /** Preferred execution mode for parallel work (set by omc-setup Step 3.7) */
-  defaultExecutionMode?: 'ultrawork' | 'ecomode';
-  /** Ecomode-specific configuration */
-  ecomode?: {
-    /** Whether ecomode is enabled (default: true). Set to false to disable ecomode completely. */
-    enabled?: boolean;
-  };
-  /** Agent tier controls */
-  agentTiers?: {
-    /** Whether LOW-tier (haiku) delegation is enabled (default: true). */
-    lowEnabled?: boolean;
-  };
   /** Whether initial setup has been completed (ISO timestamp) */
   setupCompleted?: string;
   /** Version of setup wizard that was completed */
@@ -170,9 +158,6 @@ export function getOMCConfig(): OMCConfig {
       configVersion: config.configVersion,
       taskTool: config.taskTool,
       taskToolConfig: config.taskToolConfig,
-      defaultExecutionMode: config.defaultExecutionMode,
-      ecomode: config.ecomode,
-      agentTiers: config.agentTiers,
       setupCompleted: config.setupCompleted,
       setupVersion: config.setupVersion,
       stopHookCallbacks: config.stopHookCallbacks,
@@ -199,26 +184,6 @@ export function isSilentAutoUpdateEnabled(): boolean {
  */
 export function isAutoUpgradePromptEnabled(): boolean {
   return getOMCConfig().autoUpgradePrompt !== false;
-}
-
-/**
- * Check if ecomode is enabled
- * Returns true by default if not explicitly disabled
- */
-export function isEcomodeEnabled(): boolean {
-  const config = getOMCConfig();
-  // Default to true if not configured
-  return config.ecomode?.enabled !== false;
-}
-
-/**
- * Check if low-tier agents are enabled
- * Returns true by default if not explicitly disabled
- */
-export function isLowTierAgentsEnabled(): boolean {
-  const config = getOMCConfig();
-  // Default to true if not configured
-  return config.agentTiers?.lowEnabled !== false;
 }
 
 /**

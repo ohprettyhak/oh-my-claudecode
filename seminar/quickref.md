@@ -104,7 +104,7 @@
 **File:** `~/.claude/.omc-config.json`
 ```json
 {
-  "defaultExecutionMode": "ultrawork",  // or "ecomode"
+  "defaultExecutionMode": "ultrawork",  // or ""
   "maxParallelAgents": 5,
   "verificationEnabled": true
 }

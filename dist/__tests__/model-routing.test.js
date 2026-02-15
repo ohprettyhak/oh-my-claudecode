@@ -1,13 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-vi.mock('../features/auto-update.js', () => ({
-    isLowTierAgentsEnabled: vi.fn(() => true),
-}));
-import { isLowTierAgentsEnabled } from '../features/auto-update.js';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { extractLexicalSignals, extractStructuralSignals, extractContextSignals, extractAllSignals, } from '../features/model-routing/signals.js';
 import { calculateComplexityScore, scoreToTier, calculateComplexityTier, getScoreBreakdown, calculateConfidence, } from '../features/model-routing/scorer.js';
 import { evaluateRules, getMatchingRules, createRule, mergeRules, DEFAULT_ROUTING_RULES, } from '../features/model-routing/rules.js';
 import { routeTask, escalateModel, canEscalate, getModelForTask, quickTierForAgent, analyzeTaskComplexity, } from '../features/model-routing/router.js';
-const mockedIsLowTierAgentsEnabled = vi.mocked(isLowTierAgentsEnabled);
 // ============ Signal Extraction Tests ============
 describe('Signal Extraction', () => {
     describe('extractLexicalSignals', () => {

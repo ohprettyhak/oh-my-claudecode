@@ -21,7 +21,6 @@ describe('processHook - Routing Matrix', () => {
         process.env = { ...originalEnv };
         delete process.env.DISABLE_OMC;
         delete process.env.OMC_SKIP_HOOKS;
-        vi.spyOn(autoUpdate, 'isLowTierAgentsEnabled').mockReturnValue(true);
         resetSkipHooksCache();
     });
     afterEach(() => {

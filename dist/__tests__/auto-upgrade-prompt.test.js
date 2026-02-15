@@ -23,7 +23,7 @@ vi.mock('fs', async () => {
     };
 });
 import { existsSync, readFileSync } from 'fs';
-import { getOMCConfig, isAutoUpgradePromptEnabled, isEcomodeEnabled, isLowTierAgentsEnabled, isSilentAutoUpdateEnabled, } from '../features/auto-update.js';
+import { getOMCConfig, isAutoUpgradePromptEnabled, isSilentAutoUpdateEnabled, } from '../features/auto-update.js';
 const mockedExistsSync = vi.mocked(existsSync);
 const mockedReadFileSync = vi.mocked(readFileSync);
 describe('auto-upgrade prompt config', () => {
