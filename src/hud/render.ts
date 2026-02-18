@@ -305,6 +305,14 @@ export async function render(context: HudRenderContext, config: HudConfig): Prom
     if (counts) elements.push(counts);
   }
 
+  // Context limit warning banner (shown when ctx% >= threshold)
+  const ctxWarning = renderContextLimitWarning(
+    context.contextPercent,
+    config.contextLimitWarning.threshold,
+    config.contextLimitWarning.autoCompact
+  );
+  if (ctxWarning) detailLines.push(ctxWarning);
+
   // Compose output
   const outputLines: string[] = [];
 
