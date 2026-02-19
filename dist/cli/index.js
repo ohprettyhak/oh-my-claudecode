@@ -33,7 +33,7 @@ import { waitCommand, waitStatusCommand, waitDaemonCommand, waitDetectCommand } 
 import { doctorConflictsCommand } from './commands/doctor-conflicts.js';
 import { teleportCommand, teleportListCommand, teleportRemoveCommand } from './commands/teleport.js';
 import { getRuntimePackageVersion } from '../lib/version.js';
-import { launchCommand, extractOmcLaunchFlags } from './launch.js';
+import { launchCommand } from './launch.js';
 import { interopCommand } from './interop.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const version = getRuntimePackageVersion();
@@ -88,7 +88,7 @@ async function displayAnalyticsBanner() {
         console.log('');
     }
 }
-// Default action when running 'omc' with no args (or with flags only)
+// Default action when running 'omc' with no args
 // Check env var to decide between dashboard and launch
 async function defaultAction() {
     const defaultActionMode = process.env.OMC_DEFAULT_ACTION || 'launch';
@@ -96,12 +96,8 @@ async function defaultAction() {
         await displayAnalyticsDashboard();
     }
     else {
-        // Parse raw argv to extract omc-specific flags and forward the rest to claude.
-        // We read process.argv directly so that unknown flags (e.g. --model, --verbose)
-        // are not swallowed by Commander but passed straight through to claude.
-        const rawArgs = process.argv.slice(2);
-        const { session, noTmux, claudeArgs } = extractOmcLaunchFlags(rawArgs);
-        await launchCommand(claudeArgs, { session, noTmux });
+        // Launch Claude Code by default
+        await launchCommand([]);
     }
 }
 // Analytics dashboard - moved from defaultAction
@@ -140,9 +136,6 @@ program
     .name('omc')
     .description('Multi-agent orchestration system for Claude Agent SDK with analytics')
     .version(version)
-    // Allow unknown options so flags meant for claude (--model, --verbose, etc.)
-    // are not rejected by Commander and get forwarded to launchCommand.
-    .allowUnknownOption()
     .action(defaultAction);
 /**
  * Launch command - Native tmux shell launch for Claude Code
@@ -151,30 +144,16 @@ program
     .command('launch [args...]')
     .description('Launch Claude Code with native tmux shell integration')
     .allowUnknownOption()
-    .option('--session <name>', 'Custom tmux session name (auto-derived from CWD by default)')
-    .option('--no-tmux', 'Run claude directly without tmux session wrapping')
     .addHelpText('after', `
 Examples:
-  $ omc launch                          Launch Claude Code in a tmux session
-  $ omc launch --session my-project     Launch with a custom session name
-  $ omc launch --no-tmux                Launch directly without tmux
-  $ omc launch --madmax                 Launch with permissions bypass
-  $ omc launch --yolo                   Launch with permissions bypass (alias)
-
-Flags:
-  --session <name>  Custom tmux session name (default: omc-<dir>-<branch>-<id>)
-  --no-tmux         Skip tmux wrapping, run claude directly in the current shell
+  $ omc launch                   Launch Claude Code
+  $ omc launch --madmax          Launch with permissions bypass
+  $ omc launch --yolo            Launch with permissions bypass (alias)
 
 Environment:
   Set OMC_DEFAULT_ACTION=dashboard to show analytics dashboard when running 'omc' with no args`)
-    .action(async (args, options) => {
-    // Strip --session / --no-tmux from forwarded args (Commander already parsed them),
-    // then pass any remaining unknown flags straight through to claude.
-    const { claudeArgs } = extractOmcLaunchFlags(args);
-    await launchCommand(claudeArgs, {
-        session: options.session,
-        noTmux: options.noTmux,
-    });
+    .action(async (args) => {
+    await launchCommand(args);
 });
 /**
  * Dashboard command - Show analytics dashboard
