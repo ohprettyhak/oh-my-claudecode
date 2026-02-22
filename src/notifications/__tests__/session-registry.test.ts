@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   existsSync,
+  mkdtempSync,
+  rmSync,
   unlinkSync,
   statSync,
   readFileSync,
@@ -10,7 +12,7 @@ import {
   closeSync,
 } from "fs";
 import { join } from "path";
-import { homedir } from "os";
+import { tmpdir } from "os";
 import { spawn } from "child_process";
 import {
   registerMessage,
@@ -22,9 +24,11 @@ import {
   type SessionMapping,
 } from "../session-registry.js";
 
-const REGISTRY_PATH = join(homedir(), ".omc", "state", "reply-session-registry.jsonl");
-const LOCK_PATH = join(homedir(), ".omc", "state", "reply-session-registry.lock");
 const SESSION_REGISTRY_MODULE_PATH = join(process.cwd(), "src", "notifications", "session-registry.ts");
+
+let testDir: string;
+let REGISTRY_PATH: string;
+let LOCK_PATH: string;
 
 function registerMessageInChildProcess(mapping: SessionMapping): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -60,23 +64,17 @@ registerMessage(mapping);
 
 describe("session-registry", () => {
   beforeEach(() => {
-    // Clean up registry before each test
-    if (existsSync(REGISTRY_PATH)) {
-      unlinkSync(REGISTRY_PATH);
-    }
-    if (existsSync(LOCK_PATH)) {
-      unlinkSync(LOCK_PATH);
-    }
+    // Create a fresh temp directory for each test so registry I/O is fully
+    // isolated from the real ~/.omc/state and from other parallel test runs.
+    testDir = mkdtempSync(join(tmpdir(), "omc-session-registry-test-"));
+    process.env["OMC_TEST_REGISTRY_DIR"] = testDir;
+    REGISTRY_PATH = join(testDir, "reply-session-registry.jsonl");
+    LOCK_PATH = join(testDir, "reply-session-registry.lock");
   });
 
   afterEach(() => {
-    // Clean up registry after each test
-    if (existsSync(REGISTRY_PATH)) {
-      unlinkSync(REGISTRY_PATH);
-    }
-    if (existsSync(LOCK_PATH)) {
-      unlinkSync(LOCK_PATH);
-    }
+    delete process.env["OMC_TEST_REGISTRY_DIR"];
+    rmSync(testDir, { recursive: true, force: true });
   });
 
   describe("registerMessage", () => {
