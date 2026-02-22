@@ -24,6 +24,7 @@ import { logAuditEvent } from './audit-log.js';
 import type { AuditEvent } from './audit-log.js';
 import { getEffectivePermissions, findPermissionViolations, getDefaultPermissions } from './permissions.js';
 import type { WorkerPermissions, PermissionViolation } from './permissions.js';
+import { getTeamStatus } from './team-status.js';
 
 /** Simple logger */
 function log(message: string): void {
@@ -767,6 +768,27 @@ export async function runBridge(config: BridgeConfig): Promise<void> {
           });
           audit(config, 'worker_idle');
           idleNotified = true;
+        }
+
+        // --- Auto-cleanup: self-terminate when all team tasks are done ---
+        // Only check when we have no pending task and already notified idle.
+        // Guard: if inProgress > 0, other workers are still running — don't shutdown yet.
+        try {
+          const teamStatus = getTeamStatus(teamName, workingDirectory);
+          if (teamStatus.taskSummary.pending === 0 && teamStatus.taskSummary.inProgress === 0) {
+            log(`[bridge] All team tasks complete. Auto-terminating worker.`);
+            appendOutbox(teamName, workerName, {
+              type: 'all_tasks_complete',
+              message: 'All team tasks reached terminal state. Worker self-terminating.',
+              timestamp: new Date().toISOString()
+            });
+            audit(config, 'bridge_shutdown', undefined, { reason: 'auto_cleanup_all_tasks_complete' });
+            await handleShutdown(config, { requestId: 'auto-cleanup', reason: 'all_tasks_complete' }, activeChild);
+            break;
+          }
+        } catch (err) {
+          // Non-fatal: if status check fails, keep polling
+          log(`[bridge] Auto-cleanup status check failed: ${(err as Error).message}`);
         }
       }
 
