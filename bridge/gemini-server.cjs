@@ -16595,8 +16595,15 @@ function executeGeminiBackground(fullPrompt, modelInput, jobMeta, workingDirecto
       };
       writeJobStatus(initialStatus, workingDirectory);
       const collector = createStdoutCollector(MAX_STDOUT_BYTES);
+      const partialFile = jobMeta.responseFile + ".partial";
       let stderr = "";
       let settled = false;
+      const cleanupPartial = () => {
+        try {
+          if ((0, import_fs9.existsSync)(partialFile)) (0, import_fs9.unlinkSync)(partialFile);
+        } catch {
+        }
+      };
       const timeoutHandle = setTimeout(() => {
         if (!settled) {
           settled = true;
@@ -16606,6 +16613,7 @@ function executeGeminiBackground(fullPrompt, modelInput, jobMeta, workingDirecto
             else child.kill("SIGTERM");
           } catch {
           }
+          cleanupPartial();
           writeJobStatus({
             ...initialStatus,
             status: "timeout",
@@ -16616,6 +16624,10 @@ function executeGeminiBackground(fullPrompt, modelInput, jobMeta, workingDirecto
       }, GEMINI_TIMEOUT);
       child.stdout?.on("data", (data) => {
         collector.append(data.toString());
+        try {
+          (0, import_fs9.appendFileSync)(partialFile, data);
+        } catch {
+        }
       });
       child.stderr?.on("data", (data) => {
         stderr += data.toString();
@@ -16624,6 +16636,7 @@ function executeGeminiBackground(fullPrompt, modelInput, jobMeta, workingDirecto
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        cleanupPartial();
         writeJobStatus({
           ...initialStatus,
           status: "failed",
@@ -16639,6 +16652,7 @@ function executeGeminiBackground(fullPrompt, modelInput, jobMeta, workingDirecto
         settled = true;
         clearTimeout(timeoutHandle);
         spawnedPids.delete(pid);
+        cleanupPartial();
         const stdout = collector.toString();
         const currentStatus = readJobStatus("gemini", jobMeta.slug, jobMeta.jobId, workingDirectory);
         if (currentStatus?.killedByUser) {
@@ -16718,6 +16732,7 @@ function executeGeminiBackground(fullPrompt, modelInput, jobMeta, workingDirecto
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        cleanupPartial();
         writeJobStatus({
           ...initialStatus,
           status: "failed",
@@ -16934,6 +16949,7 @@ ${validPaths.map((f) => `- ${f}`).join("\n")}`;
           `**PID:** ${result.pid}`,
           `**Prompt File:** ${promptResult.filePath}`,
           `**Response File:** ${expectedResponsePath}`,
+          `**Partial Output:** ${expectedResponsePath}.partial  (tail -f to stream live)`,
           `**Status File:** ${statusFilePath}`,
           ``,
           `Job dispatched. Will automatically try fallback models on 429/rate-limit or model errors.`

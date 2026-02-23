@@ -16740,7 +16740,7 @@ function executeCodex(prompt, model, cwd, reasoningEffort) {
   return new Promise((resolve8, reject) => {
     validateModelName(model);
     let settled = false;
-    const args = ["exec", "-m", model, "--json", "--full-auto"];
+    const args = ["exec", "-m", model, "--json", "--full-auto", "--skip-git-repo-check"];
     if (reasoningEffort && VALID_REASONING_EFFORTS.includes(reasoningEffort)) {
       args.push("-c", `model_reasoning_effort="${reasoningEffort}"`);
     }
@@ -16865,7 +16865,7 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
     const modelsToTry = modelExplicit ? [effectiveModel] : CODEX_MODEL_FALLBACKS.includes(effectiveModel) ? CODEX_MODEL_FALLBACKS.slice(CODEX_MODEL_FALLBACKS.indexOf(effectiveModel)) : [effectiveModel, ...CODEX_MODEL_FALLBACKS];
     const trySpawnWithModel = (tryModel, remainingModels, rateLimitAttempt = 0) => {
       validateModelName(tryModel);
-      const args = ["exec", "-m", tryModel, "--json", "--full-auto"];
+      const args = ["exec", "-m", tryModel, "--json", "--full-auto", "--skip-git-repo-check"];
       if (reasoningEffort && VALID_REASONING_EFFORTS.includes(reasoningEffort)) {
         args.push("-c", `model_reasoning_effort="${reasoningEffort}"`);
       }
@@ -16897,8 +16897,15 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
       };
       writeJobStatus(initialStatus, workingDirectory);
       const collector = createStdoutCollector(MAX_STDOUT_BYTES);
+      const partialFile = jobMeta.responseFile + ".partial";
       let stderr = "";
       let settled = false;
+      const cleanupPartial = () => {
+        try {
+          if ((0, import_fs9.existsSync)(partialFile)) (0, import_fs9.unlinkSync)(partialFile);
+        } catch {
+        }
+      };
       const timeoutHandle = setTimeout(() => {
         if (!settled) {
           settled = true;
@@ -16908,6 +16915,7 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
             else child.kill("SIGTERM");
           } catch {
           }
+          cleanupPartial();
           writeJobStatus({
             ...initialStatus,
             status: "timeout",
@@ -16918,6 +16926,10 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
       }, CODEX_TIMEOUT);
       child.stdout?.on("data", (data) => {
         collector.append(data.toString());
+        try {
+          (0, import_fs9.appendFileSync)(partialFile, data);
+        } catch {
+        }
       });
       child.stderr?.on("data", (data) => {
         stderr += data.toString();
@@ -16926,6 +16938,7 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        cleanupPartial();
         writeJobStatus({
           ...initialStatus,
           status: "failed",
@@ -16941,6 +16954,7 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
         settled = true;
         clearTimeout(timeoutHandle);
         spawnedPids.delete(pid);
+        cleanupPartial();
         const stdout = collector.toString();
         const currentStatus = readJobStatus("codex", jobMeta.slug, jobMeta.jobId, workingDirectory);
         if (currentStatus?.killedByUser) {
@@ -17084,6 +17098,7 @@ function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingDirector
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        cleanupPartial();
         writeJobStatus({
           ...initialStatus,
           status: "failed",
@@ -17310,6 +17325,7 @@ ${validPaths.map((f) => `- ${f}`).join("\n")}`;
           `**PID:** ${result.pid}`,
           `**Prompt File:** ${promptResult.filePath}`,
           `**Response File:** ${expectedResponsePath}`,
+          `**Partial Output:** ${expectedResponsePath}.partial  (tail -f to stream live)`,
           `**Status File:** ${statusFilePath}`,
           ``,
           `Job dispatched. Check response file existence or read status file for completion.`

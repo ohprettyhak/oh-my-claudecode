@@ -13,7 +13,7 @@
  */
 
 import { spawn } from 'child_process';
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve, relative, sep, isAbsolute, join } from 'path';
 import { createStdoutCollector, safeWriteOutputFile } from './shared-exec.js';
 import { detectGeminiCli } from './cli-detection.js';
@@ -219,8 +219,13 @@ export function executeGeminiBackground(
       writeJobStatus(initialStatus, workingDirectory);
 
       const collector = createStdoutCollector(MAX_STDOUT_BYTES);
+      const partialFile = jobMeta.responseFile + '.partial';
       let stderr = '';
       let settled = false;
+
+      const cleanupPartial = () => {
+        try { if (existsSync(partialFile)) unlinkSync(partialFile); } catch { /* ignore */ }
+      };
 
       const timeoutHandle = setTimeout(() => {
         if (!settled) {
@@ -232,6 +237,7 @@ export function executeGeminiBackground(
           } catch {
             // ignore
           }
+          cleanupPartial();
           writeJobStatus({
             ...initialStatus,
             status: 'timeout',
@@ -243,6 +249,7 @@ export function executeGeminiBackground(
 
       child.stdout?.on('data', (data: Buffer) => {
         collector.append(data.toString());
+        try { appendFileSync(partialFile, data); } catch { /* ignore */ }
       });
       child.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
 
@@ -250,6 +257,7 @@ export function executeGeminiBackground(
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        cleanupPartial();
         writeJobStatus({
           ...initialStatus,
           status: 'failed',
@@ -266,6 +274,7 @@ export function executeGeminiBackground(
         settled = true;
         clearTimeout(timeoutHandle);
         spawnedPids.delete(pid);
+        cleanupPartial();
         const stdout = collector.toString();
 
         // Check if user killed this job
@@ -352,6 +361,7 @@ export function executeGeminiBackground(
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        cleanupPartial();
         writeJobStatus({
           ...initialStatus,
           status: 'failed',
@@ -645,6 +655,7 @@ ${resolvedPrompt}`;
           `**PID:** ${result.pid}`,
           `**Prompt File:** ${promptResult.filePath}`,
           `**Response File:** ${expectedResponsePath}`,
+          `**Partial Output:** ${expectedResponsePath}.partial  (tail -f to stream live)`,
           `**Status File:** ${statusFilePath}`,
           ``,
           `Job dispatched. Will automatically try fallback models on 429/rate-limit or model errors.`,

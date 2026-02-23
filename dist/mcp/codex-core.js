@@ -8,7 +8,7 @@
  * This module is SDK-agnostic and contains no dependencies on @anthropic-ai/claude-agent-sdk.
  */
 import { spawn } from 'child_process';
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve, relative, sep, isAbsolute, join } from 'path';
 import { createStdoutCollector, safeWriteOutputFile } from './shared-exec.js';
 import { detectCodexCli } from './cli-detection.js';
@@ -184,7 +184,7 @@ export function executeCodex(prompt, model, cwd, reasoningEffort) {
     return new Promise((resolve, reject) => {
         validateModelName(model);
         let settled = false;
-        const args = ['exec', '-m', model, '--json', '--full-auto'];
+        const args = ['exec', '-m', model, '--json', '--full-auto', '--skip-git-repo-check'];
         // Per-call reasoning effort override via Codex CLI -c flag
         if (reasoningEffort && VALID_REASONING_EFFORTS.includes(reasoningEffort)) {
             args.push('-c', `model_reasoning_effort="${reasoningEffort}"`);
@@ -341,7 +341,7 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
         // Helper to try spawning with a specific model
         const trySpawnWithModel = (tryModel, remainingModels, rateLimitAttempt = 0) => {
             validateModelName(tryModel);
-            const args = ['exec', '-m', tryModel, '--json', '--full-auto'];
+            const args = ['exec', '-m', tryModel, '--json', '--full-auto', '--skip-git-repo-check'];
             // Per-call reasoning effort override for background execution
             if (reasoningEffort && VALID_REASONING_EFFORTS.includes(reasoningEffort)) {
                 args.push('-c', `model_reasoning_effort="${reasoningEffort}"`);
@@ -375,8 +375,16 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
             };
             writeJobStatus(initialStatus, workingDirectory);
             const collector = createStdoutCollector(MAX_STDOUT_BYTES);
+            const partialFile = jobMeta.responseFile + '.partial';
             let stderr = '';
             let settled = false;
+            const cleanupPartial = () => {
+                try {
+                    if (existsSync(partialFile))
+                        unlinkSync(partialFile);
+                }
+                catch { /* ignore */ }
+            };
             const timeoutHandle = setTimeout(() => {
                 if (!settled) {
                     settled = true;
@@ -391,6 +399,7 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
                     catch {
                         // ignore
                     }
+                    cleanupPartial();
                     writeJobStatus({
                         ...initialStatus,
                         status: 'timeout',
@@ -401,6 +410,10 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
             }, CODEX_TIMEOUT);
             child.stdout?.on('data', (data) => {
                 collector.append(data.toString());
+                try {
+                    appendFileSync(partialFile, data);
+                }
+                catch { /* ignore */ }
             });
             child.stderr?.on('data', (data) => { stderr += data.toString(); });
             // Update to running after stdin write
@@ -409,6 +422,7 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
                     return;
                 settled = true;
                 clearTimeout(timeoutHandle);
+                cleanupPartial();
                 writeJobStatus({
                     ...initialStatus,
                     status: 'failed',
@@ -425,6 +439,7 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
                 settled = true;
                 clearTimeout(timeoutHandle);
                 spawnedPids.delete(pid);
+                cleanupPartial();
                 const stdout = collector.toString();
                 // Check if user killed this job - if so, don't overwrite the killed status
                 const currentStatus = readJobStatus('codex', jobMeta.slug, jobMeta.jobId, workingDirectory);
@@ -580,6 +595,7 @@ export function executeCodexBackground(fullPrompt, modelInput, jobMeta, workingD
                     return;
                 settled = true;
                 clearTimeout(timeoutHandle);
+                cleanupPartial();
                 writeJobStatus({
                     ...initialStatus,
                     status: 'failed',
@@ -854,6 +870,7 @@ ${resolvedPrompt}`;
                         `**PID:** ${result.pid}`,
                         `**Prompt File:** ${promptResult.filePath}`,
                         `**Response File:** ${expectedResponsePath}`,
+                        `**Partial Output:** ${expectedResponsePath}.partial  (tail -f to stream live)`,
                         `**Status File:** ${statusFilePath}`,
                         ``,
                         `Job dispatched. Check response file existence or read status file for completion.`,

@@ -12,7 +12,7 @@
  * - gemini-standalone-server.ts (stdio-based external process server)
  */
 import { spawn } from 'child_process';
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'fs';
 import { resolve, relative, sep, isAbsolute, join } from 'path';
 import { createStdoutCollector, safeWriteOutputFile } from './shared-exec.js';
 import { detectGeminiCli } from './cli-detection.js';
@@ -188,8 +188,16 @@ export function executeGeminiBackground(fullPrompt, modelInput, jobMeta, working
             };
             writeJobStatus(initialStatus, workingDirectory);
             const collector = createStdoutCollector(MAX_STDOUT_BYTES);
+            const partialFile = jobMeta.responseFile + '.partial';
             let stderr = '';
             let settled = false;
+            const cleanupPartial = () => {
+                try {
+                    if (existsSync(partialFile))
+                        unlinkSync(partialFile);
+                }
+                catch { /* ignore */ }
+            };
             const timeoutHandle = setTimeout(() => {
                 if (!settled) {
                     settled = true;
@@ -203,6 +211,7 @@ export function executeGeminiBackground(fullPrompt, modelInput, jobMeta, working
                     catch {
                         // ignore
                     }
+                    cleanupPartial();
                     writeJobStatus({
                         ...initialStatus,
                         status: 'timeout',
@@ -213,6 +222,10 @@ export function executeGeminiBackground(fullPrompt, modelInput, jobMeta, working
             }, GEMINI_TIMEOUT);
             child.stdout?.on('data', (data) => {
                 collector.append(data.toString());
+                try {
+                    appendFileSync(partialFile, data);
+                }
+                catch { /* ignore */ }
             });
             child.stderr?.on('data', (data) => { stderr += data.toString(); });
             child.stdin?.on('error', (err) => {
@@ -220,6 +233,7 @@ export function executeGeminiBackground(fullPrompt, modelInput, jobMeta, working
                     return;
                 settled = true;
                 clearTimeout(timeoutHandle);
+                cleanupPartial();
                 writeJobStatus({
                     ...initialStatus,
                     status: 'failed',
@@ -236,6 +250,7 @@ export function executeGeminiBackground(fullPrompt, modelInput, jobMeta, working
                 settled = true;
                 clearTimeout(timeoutHandle);
                 spawnedPids.delete(pid);
+                cleanupPartial();
                 const stdout = collector.toString();
                 // Check if user killed this job
                 const currentStatus = readJobStatus('gemini', jobMeta.slug, jobMeta.jobId, workingDirectory);
@@ -320,6 +335,7 @@ export function executeGeminiBackground(fullPrompt, modelInput, jobMeta, working
                     return;
                 settled = true;
                 clearTimeout(timeoutHandle);
+                cleanupPartial();
                 writeJobStatus({
                     ...initialStatus,
                     status: 'failed',
@@ -572,6 +588,7 @@ ${resolvedPrompt}`;
                         `**PID:** ${result.pid}`,
                         `**Prompt File:** ${promptResult.filePath}`,
                         `**Response File:** ${expectedResponsePath}`,
+                        `**Partial Output:** ${expectedResponsePath}.partial  (tail -f to stream live)`,
                         `**Status File:** ${statusFilePath}`,
                         ``,
                         `Job dispatched. Will automatically try fallback models on 429/rate-limit or model errors.`,
