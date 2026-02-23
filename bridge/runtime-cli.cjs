@@ -592,42 +592,24 @@ Write your ready sentinel first, then claim tasks from .omc/state/team/${teamNam
     workerNames.map(async (wName, i) => {
       const agentType = agentTypes[i] ?? agentTypes[0] ?? "claude";
       const paneId = session.workerPaneIds[i];
-      if (agentType === "claude") {
-        await new Promise((r) => setTimeout(r, 4e3));
-        const task = tasks[i] ?? tasks[0];
-        if (task) {
-          const taskId = String(i + 1);
-          const instruction = buildInitialTaskInstruction(teamName, wName, task, taskId);
-          const inboxPath = (0, import_path4.join)(cwd, `.omc/state/team/${teamName}/workers/${wName}/inbox.md`);
-          await (0, import_promises2.appendFile)(inboxPath, `
+      await new Promise((r) => setTimeout(r, 4e3));
+      if (agentType === "gemini") {
+        await sendToWorker(session.sessionName, paneId, "1");
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      const task = tasks[i] ?? tasks[0];
+      if (task) {
+        const taskId = String(i + 1);
+        const instruction = buildInitialTaskInstruction(teamName, wName, task, taskId);
+        const inboxPath = (0, import_path4.join)(cwd, `.omc/state/team/${teamName}/workers/${wName}/inbox.md`);
+        await (0, import_promises2.appendFile)(inboxPath, `
 
 ---
 ${instruction}
 _queued: ${(/* @__PURE__ */ new Date()).toISOString()}_
 `, "utf-8");
-          const relPath = `.omc/state/team/${teamName}/workers/${wName}/inbox.md`;
-          await sendToWorker(session.sessionName, paneId, `Read and execute your task from: ${relPath}`);
-        }
-      } else {
-        await new Promise((r) => setTimeout(r, 4e3));
-        if (agentType === "gemini") {
-          await sendToWorker(session.sessionName, paneId, "1");
-          await new Promise((r) => setTimeout(r, 800));
-        }
-        const task = tasks[i] ?? tasks[0];
-        if (task) {
-          const taskId = String(i + 1);
-          const instruction = buildInitialTaskInstruction(teamName, wName, task, taskId);
-          const inboxPath = (0, import_path4.join)(cwd, `.omc/state/team/${teamName}/workers/${wName}/inbox.md`);
-          await (0, import_promises2.appendFile)(inboxPath, `
-
----
-${instruction}
-_queued: ${(/* @__PURE__ */ new Date()).toISOString()}_
-`, "utf-8");
-          const relPath = `.omc/state/team/${teamName}/workers/${wName}/inbox.md`;
-          await sendToWorker(session.sessionName, paneId, `Read and execute your task from: ${relPath}`);
-        }
+        const relPath = `.omc/state/team/${teamName}/workers/${wName}/inbox.md`;
+        await sendToWorker(session.sessionName, paneId, `Read and execute your task from: ${relPath}`);
       }
     })
   );
@@ -705,7 +687,6 @@ async function monitorTeam(teamName, cwd, workerPaneIds) {
     };
     workers.push(status);
     if (!alive) deadWorkers.push(wName);
-    if (stalled) console.warn(`[runtime] Worker ${wName} appears stalled (no heartbeat for 60s)`);
   }
   let phase = "executing";
   if (taskCounts.inProgress === 0 && taskCounts.pending > 0 && taskCounts.completed === 0) {

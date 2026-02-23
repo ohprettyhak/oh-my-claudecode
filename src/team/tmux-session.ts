@@ -393,34 +393,6 @@ export async function injectToLeaderPane(
 }
 
 /**
- * Wait for a worker to write its ready sentinel file.
- * Polls .omc/state/team/{teamName}/workers/{workerName}/.ready
- * Default timeout: 30s
- */
-export async function waitForWorkerReady(
-  teamName: string,
-  workerName: string,
-  cwd: string,
-  timeoutMs = 30_000
-): Promise<boolean> {
-  const { access } = await import('fs/promises');
-  const { join } = await import('path');
-  const sentinelPath = join(cwd, `.omc/state/team/${teamName}/workers/${workerName}/.ready`);
-  const pollInterval = 500;
-  const deadline = Date.now() + timeoutMs;
-
-  while (Date.now() < deadline) {
-    try {
-      await access(sentinelPath);
-      return true;
-    } catch {
-      await new Promise(r => setTimeout(r, pollInterval));
-    }
-  }
-  return false;
-}
-
-/**
  * Check if a worker pane is still alive.
  * Uses pane ID for stable targeting (not pane index).
  */
@@ -475,32 +447,3 @@ export async function killTeamSession(
   }
 }
 
-/**
- * Respawn a worker in a new pane (when old pane died).
- * Returns the new pane ID.
- */
-export async function respawnWorkerInPane(
-  sessionName: string,
-  config: WorkerPaneConfig
-): Promise<string> {
-  const { execFile } = await import('child_process');
-  const { promisify } = await import('util');
-  const execFileAsync = promisify(execFile);
-
-  // Create new vertical split in the session
-  await execFileAsync('tmux', [
-    'split-window', '-v', '-t', sessionName, '-c', config.cwd
-  ]);
-
-  // Get the new pane ID
-  const allPanesResult = await execFileAsync('tmux', [
-    'list-panes', '-t', sessionName, '-F', '#{pane_id}'
-  ]);
-  const allPanes = allPanesResult.stdout.trim().split('\n').filter(Boolean);
-  const newPaneId = allPanes[allPanes.length - 1];
-
-  // Spawn worker in new pane
-  await spawnWorkerInPane(sessionName, newPaneId, config);
-
-  return newPaneId;
-}

@@ -178,42 +178,26 @@ export async function startTeam(config: TeamConfig): Promise<TeamRuntime> {
       const agentType = agentTypes[i] ?? agentTypes[0] ?? 'claude';
       const paneId = session.workerPaneIds[i];
 
-      if (agentType === 'claude') {
-        // Wait for CLI startup (same as codex/gemini — no sentinel protocol)
-        await new Promise(r => setTimeout(r, 4000));
+      // All agent types: wait for CLI startup, then deliver task via inbox file.
+      // Natural-language trigger works for claude, codex, and gemini.
+      await new Promise(r => setTimeout(r, 4000));
 
-        const task = tasks[i] ?? tasks[0];
-        if (task) {
-          const taskId = String(i + 1);
-          const instruction = buildInitialTaskInstruction(teamName, wName, task, taskId);
-          const inboxPath = join(cwd, `.omc/state/team/${teamName}/workers/${wName}/inbox.md`);
-          await appendFile(inboxPath, `\n\n---\n${instruction}\n_queued: ${new Date().toISOString()}_\n`, 'utf-8');
-          const relPath = `.omc/state/team/${teamName}/workers/${wName}/inbox.md`;
-          await sendToWorker(session.sessionName, paneId, `Read and execute your task from: ${relPath}`);
-        }
-      } else {
-        // Non-Claude workers (codex/gemini): wait for CLI startup, then send initial task via tmux
-        // These CLIs don't understand the sentinel protocol
-        await new Promise(r => setTimeout(r, 4000));
+      // Gemini shows a "Trust folder?" dialog before accepting input — send '1' to trust
+      if (agentType === 'gemini') {
+        await sendToWorker(session.sessionName, paneId, '1');
+        await new Promise(r => setTimeout(r, 800));
+      }
 
-        // Gemini shows a "Trust folder?" dialog before accepting input — send '1' to trust
-        if (agentType === 'gemini') {
-          await sendToWorker(session.sessionName, paneId, '1');
-          await new Promise(r => setTimeout(r, 800));
-        }
-
-        // Deliver full task via inbox file to avoid 200-char tmux limit.
-        // Non-Claude CLIs (codex/gemini) don't understand 'check-inbox' protocol,
-        // so we write to the inbox file and send a natural-language read trigger.
-        const task = tasks[i] ?? tasks[0];
-        if (task) {
-          const taskId = String(i + 1);
-          const instruction = buildInitialTaskInstruction(teamName, wName, task, taskId);
-          const inboxPath = join(cwd, `.omc/state/team/${teamName}/workers/${wName}/inbox.md`);
-          await appendFile(inboxPath, `\n\n---\n${instruction}\n_queued: ${new Date().toISOString()}_\n`, 'utf-8');
-          const relPath = `.omc/state/team/${teamName}/workers/${wName}/inbox.md`;
-          await sendToWorker(session.sessionName, paneId, `Read and execute your task from: ${relPath}`);
-        }
+      // Deliver full task via inbox file to avoid 200-char tmux limit.
+      // Write to inbox first, then send natural-language read trigger.
+      const task = tasks[i] ?? tasks[0];
+      if (task) {
+        const taskId = String(i + 1);
+        const instruction = buildInitialTaskInstruction(teamName, wName, task, taskId);
+        const inboxPath = join(cwd, `.omc/state/team/${teamName}/workers/${wName}/inbox.md`);
+        await appendFile(inboxPath, `\n\n---\n${instruction}\n_queued: ${new Date().toISOString()}_\n`, 'utf-8');
+        const relPath = `.omc/state/team/${teamName}/workers/${wName}/inbox.md`;
+        await sendToWorker(session.sessionName, paneId, `Read and execute your task from: ${relPath}`);
       }
     })
   );
@@ -310,7 +294,7 @@ export async function monitorTeam(teamName: string, cwd: string, workerPaneIds: 
 
     workers.push(status);
     if (!alive) deadWorkers.push(wName);
-    if (stalled) console.warn(`[runtime] Worker ${wName} appears stalled (no heartbeat for 60s)`);
+    // Note: CLI workers (codex/gemini) may not write heartbeat.json — stall is advisory only
   }
 
   // Infer phase from task counts
