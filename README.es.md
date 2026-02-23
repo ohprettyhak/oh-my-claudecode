@@ -36,6 +36,55 @@ autopilot: build a REST API for managing tasks
 
 Eso es todo. Todo lo demás es automático.
 
+## Modo Team (Recomendado)
+
+A partir de **v4.1.7**, **Team** es la superficie canónica de orquestación en OMC. Los puntos de entrada legados como **swarm** y **ultrapilot** siguen siendo compatibles, pero ahora **enrutan a Team internamente**.
+
+```bash
+/team 3:executor "fix all TypeScript errors"
+```
+
+Team se ejecuta como un pipeline por etapas:
+
+`team-plan → team-prd → team-exec → team-verify → team-fix (loop)`
+
+Habilita los equipos nativos de Claude Code en `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+> Si los equipos están desactivados, OMC te avisará y hará fallback a ejecución sin Team cuando sea posible.
+
+### Trabajadores CLI tmux — Codex & Gemini (v4.4.0+)
+
+**v4.4.0 elimina los servidores MCP de Codex/Gemini** (proveedores `x`, `g`). Usa `/omc-teams` para lanzar procesos CLI reales en paneles divididos de tmux:
+
+```bash
+/omc-teams 2:codex   "review auth module for security issues"
+/omc-teams 2:gemini  "redesign UI components for accessibility"
+/omc-teams 1:claude  "implement the payment flow"
+```
+
+Para trabajo mixto de Codex + Gemini en un solo comando, usa la habilidad **`/ccg`**:
+
+```bash
+/ccg Review this PR — architecture (Codex) and UI components (Gemini)
+```
+
+| Habilidad | Trabajadores | Mejor Para |
+|-------|---------|----------|
+| `/omc-teams N:codex` | N paneles Codex CLI | Revisión de código, análisis de seguridad, arquitectura |
+| `/omc-teams N:gemini` | N paneles Gemini CLI | Diseño UI/UX, docs, tareas de gran contexto |
+| `/omc-teams N:claude` | N paneles Claude CLI | Tareas generales via Claude CLI en tmux |
+| `/ccg` | 1 Codex + 1 Gemini | Orquestación tri-modelo en paralelo |
+
+Los trabajadores se inician bajo demanda y terminan cuando su tarea se completa — sin uso de recursos en espera. Requiere las CLIs `codex` / `gemini` instaladas y una sesión tmux activa.
+
 > **Nota: Nombre del paquete** — El proyecto usa la marca **oh-my-claudecode** (repositorio, plugin, comandos), pero el paquete npm se publica como [`oh-my-claudecode`](https://www.npmjs.com/package/oh-my-claude-sisyphus). Si instalas las herramientas CLI via npm/bun, usa `npm install -g oh-my-claude-sisyphus`.
 
 ### Actualizar
@@ -81,14 +130,16 @@ Si experimentas problemas despues de actualizar, limpia la cache antigua del plu
 ### Modos de Ejecución
 Múltiples estrategias para diferentes casos de uso - desde construcciones completamente autónomas hasta refactorización eficiente en tokens. [Aprende más →](https://yeachan-heo.github.io/oh-my-claudecode-website/docs.html#execution-modes)
 
-| Modo | Velocidad | Usar Para |
-|------|-------|---------|
-| **Autopilot** | Rápido | Flujos de trabajo completamente autónomos |
-| **Ultrawork** | Paralelo | Máximo paralelismo para cualquier tarea |
-| **Ralph** | Persistente | Tareas que deben completarse totalmente |
-| **Ultrapilot** | 3-5x más rápido | Sistemas multi-componente |
-| **Swarm** | Coordinado | Tareas independientes en paralelo |
-| **Pipeline** | Secuencial | Procesamiento multi-etapa |
+| Modo | Característica | Usar Para |
+|------|---------|---------|
+| **Team (recomendado)** | Pipeline por etapas | Agentes Claude coordinados en una lista de tareas compartida |
+| **omc-teams** | Trabajadores CLI tmux | Tareas Codex/Gemini CLI; se inician bajo demanda, terminan al completar |
+| **ccg** | Tri-modelo en paralelo | Codex (analítico) + Gemini (diseño), Claude sintetiza |
+| **Autopilot** | Ejecución autónoma | Trabajo de feature end-to-end con mínima ceremonia |
+| **Ultrawork** | Máximo paralelismo | Correcciones/refactorizaciones en ráfaga cuando Team no es necesario |
+| **Ralph** | Modo persistente | Tareas que deben completarse totalmente |
+| **Pipeline** | Procesamiento secuencial | Transformaciones multi-etapa con ordenación estricta |
+| **Swarm / Ultrapilot (legado)** | Enrutan a Team | Flujos de trabajo existentes y documentación antigua |
 
 ### Orquestación Inteligente
 
@@ -113,11 +164,16 @@ Atajos opcionales para usuarios avanzados. El lenguaje natural funciona bien sin
 
 | Palabra Clave | Efecto | Ejemplo |
 |---------|--------|---------|
+| `team` | Orquestación canónica con Team | `/team 3:executor "fix all TypeScript errors"` |
+| `omc-teams` | Trabajadores CLI tmux (codex/gemini/claude) | `/omc-teams 2:codex "security review"` |
+| `ccg` | Orquestación tri-modelo Codex+Gemini | `/ccg review this PR` |
 | `autopilot` | Ejecución completamente autónoma | `autopilot: build a todo app` |
 | `ralph` | Modo persistencia | `ralph: refactor auth` |
 | `ulw` | Máximo paralelismo | `ulw fix all errors` |
 | `plan` | Entrevista de planificación | `plan the API` |
 | `ralplan` | Consenso de planificación iterativa | `ralplan this feature` |
+| `swarm` | Palabra clave legada (enruta a Team) | `swarm 5 agents: fix lint errors` |
+| `ultrapilot` | Palabra clave legada (enruta a Team) | `ultrapilot: build a fullstack app` |
 
 **ralph incluye ultrawork:** Cuando activas el modo ralph, automáticamente incluye la ejecución paralela de ultrawork. No es necesario combinar palabras clave.
 
