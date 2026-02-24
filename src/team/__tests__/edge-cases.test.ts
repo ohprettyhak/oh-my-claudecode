@@ -417,8 +417,8 @@ describe('inbox-outbox edge cases', () => {
       rotateOutboxIfNeeded(EDGE_TEAM_IO, 'w1', 0);
       const lines = readFileSync(join(TEAMS_IO_DIR, 'outbox', 'w1.jsonl'), 'utf-8')
         .trim().split('\n').filter(l => l.trim());
-      // slice(-0) === slice(0) === full array, so 1 line is preserved
-      expect(lines).toHaveLength(1);
+      // keepCount === 0 clears the outbox
+      expect(lines).toHaveLength(0);
     });
   });
 
