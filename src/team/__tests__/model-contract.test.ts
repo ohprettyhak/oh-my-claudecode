@@ -28,9 +28,10 @@ describe('model-contract', () => {
       const args = buildLaunchArgs('claude', { teamName: 't', workerName: 'w', cwd: '/tmp' });
       expect(args).toContain('--dangerously-skip-permissions');
     });
-    it('codex includes --full-auto', () => {
+    it('codex includes --full-auto and bypass approvals/sandbox', () => {
       const args = buildLaunchArgs('codex', { teamName: 't', workerName: 'w', cwd: '/tmp' });
       expect(args).toContain('--full-auto');
+      expect(args).toContain('--dangerously-bypass-approvals-and-sandbox');
     });
     it('gemini includes --yolo', () => {
       const args = buildLaunchArgs('gemini', { teamName: 't', workerName: 'w', cwd: '/tmp' });
