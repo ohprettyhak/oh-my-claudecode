@@ -257,7 +257,7 @@ describe('runClaude outside-tmux — mouse scrolling (issue #890)', () => {
     processExitSpy.mockRestore();
   });
 
-  it('enables mouse mode in the new tmux session so scroll works instead of history navigation', () => {
+  it('uses session-targeted mouse option instead of global (-t sessionName, not -g)', () => {
     runClaude('/tmp', [], 'sid');
 
     const calls = vi.mocked(execFileSync).mock.calls;
@@ -265,10 +265,26 @@ describe('runClaude outside-tmux — mouse scrolling (issue #890)', () => {
     expect(tmuxCall).toBeDefined();
 
     const tmuxArgs = tmuxCall![1] as string[];
-    // set-option -g mouse on must appear in the tmux command chain
-    expect(tmuxArgs).toContain('set-option');
-    expect(tmuxArgs).toContain('mouse');
-    expect(tmuxArgs).toContain('on');
+    // Must use -t <sessionName> targeting, not -g (global)
+    const setOptionIdx = tmuxArgs.indexOf('set-option');
+    expect(setOptionIdx).toBeGreaterThanOrEqual(0);
+    expect(tmuxArgs[setOptionIdx + 1]).toBe('-t');
+    expect(tmuxArgs[setOptionIdx + 2]).toBe('test-session');
+    expect(tmuxArgs[setOptionIdx + 3]).toBe('mouse');
+    expect(tmuxArgs[setOptionIdx + 4]).toBe('on');
+    // Must NOT use -g (global)
+    expect(tmuxArgs).not.toContain('-g');
+  });
+
+  it('sets terminal-overrides to disable alternate screen so scroll works in TUI', () => {
+    runClaude('/tmp', [], 'sid');
+
+    const calls = vi.mocked(execFileSync).mock.calls;
+    const tmuxCall = calls.find(([cmd]) => cmd === 'tmux');
+    const tmuxArgs = tmuxCall![1] as string[];
+
+    expect(tmuxArgs).toContain('terminal-overrides');
+    expect(tmuxArgs).toContain('*:smcup@:rmcup@');
   });
 
   it('places mouse mode setup before attach-session', () => {
@@ -283,5 +299,55 @@ describe('runClaude outside-tmux — mouse scrolling (issue #890)', () => {
     expect(mouseIdx).toBeGreaterThanOrEqual(0);
     expect(attachIdx).toBeGreaterThanOrEqual(0);
     expect(mouseIdx).toBeLessThan(attachIdx);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runClaude — inside-tmux mouse configuration (issue #890)
+// ---------------------------------------------------------------------------
+describe('runClaude inside-tmux — mouse configuration (issue #890)', () => {
+  let processExitSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    processExitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    (resolveLaunchPolicy as ReturnType<typeof vi.fn>).mockReturnValue('inside-tmux');
+    (execFileSync as ReturnType<typeof vi.fn>).mockReturnValue(Buffer.from(''));
+  });
+
+  afterEach(() => {
+    processExitSpy.mockRestore();
+  });
+
+  it('enables mouse mode and terminal-overrides before launching claude', () => {
+    runClaude('/tmp', [], 'sid');
+
+    const calls = vi.mocked(execFileSync).mock.calls;
+
+    // First two calls should be tmux set-option for mouse config
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+    expect(calls[0][0]).toBe('tmux');
+    expect(calls[0][1]).toEqual(['set-option', 'mouse', 'on']);
+    expect(calls[1][0]).toBe('tmux');
+    expect(calls[1][1]).toEqual(['set-option', 'terminal-overrides', '*:smcup@:rmcup@']);
+
+    // Third call should be claude
+    expect(calls[2][0]).toBe('claude');
+  });
+
+  it('still launches claude even if tmux mouse config fails', () => {
+    let callCount = 0;
+    (execFileSync as ReturnType<typeof vi.fn>).mockImplementation((cmd: string) => {
+      callCount++;
+      if (cmd === 'tmux') throw new Error('tmux set-option failed');
+      return Buffer.from('');
+    });
+
+    runClaude('/tmp', [], 'sid');
+
+    // tmux calls fail but claude should still be called
+    const calls = vi.mocked(execFileSync).mock.calls;
+    const claudeCall = calls.find(([cmd]) => cmd === 'claude');
+    expect(claudeCall).toBeDefined();
   });
 });
