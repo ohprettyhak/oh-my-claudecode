@@ -59,7 +59,11 @@ describe('model-contract', () => {
 
   describe('buildWorkerArgv', () => {
     it('builds binary + args', () => {
-      expect(buildWorkerArgv('codex', { teamName: 'my-team', workerName: 'worker-1', cwd: '/tmp' })).toEqual(['codex', '--full-auto']);
+      expect(buildWorkerArgv('codex', { teamName: 'my-team', workerName: 'worker-1', cwd: '/tmp' })).toEqual([
+        'codex',
+        '--full-auto',
+        '--dangerously-bypass-approvals-and-sandbox',
+      ]);
     });
   });
 
