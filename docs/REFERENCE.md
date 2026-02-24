@@ -54,7 +54,7 @@ This integrates directly with Claude Code's plugin system and uses Node.js hooks
 Configure omc for the current project only:
 
 ```
-/oh-my-claudecode:omc-setup
+/oh-my-claudecode:omc-setup --local
 ```
 
 - Creates `./.claude/CLAUDE.md` in your current project
