@@ -589,39 +589,56 @@ echo "Default execution mode set to: USER_CHOICE"
 
 The OMC CLI (`omc` command) provides standalone token analytics and management commands (`omc stats`, `omc agents`, `omc tui`).
 
-This step checks if the CLI is already installed, and installs it if missing.
+First, check if the CLI is already installed:
 
 ```bash
 # Check if omc CLI is already available
 if command -v omc &>/dev/null; then
   OMC_CLI_VERSION=$(omc --version 2>/dev/null | head -1 || echo "installed")
   echo "OMC CLI already installed: $OMC_CLI_VERSION"
+  OMC_CLI_INSTALLED="true"
 else
-  echo "OMC CLI not found. Installing..."
+  OMC_CLI_INSTALLED="false"
+fi
+```
 
-  # Check if npm is available
-  if ! command -v npm &>/dev/null; then
-    echo "WARNING: npm not found. Cannot install OMC CLI automatically."
-    echo "Install Node.js/npm first, then run: npm install -g oh-my-claude-sisyphus"
-  else
-    # Install the CLI globally
-    if npm install -g oh-my-claude-sisyphus 2>&1; then
-      echo "OMC CLI installed successfully."
-      # Verify installation
-      if command -v omc &>/dev/null; then
-        OMC_CLI_VERSION=$(omc --version 2>/dev/null | head -1 || echo "installed")
-        echo "Verified: omc $OMC_CLI_VERSION"
-      else
-        echo "Installed but 'omc' not on PATH. You may need to restart your shell."
-      fi
+If `OMC_CLI_INSTALLED` is `"true"`, skip the rest of this step.
+
+If `OMC_CLI_INSTALLED` is `"false"`, use the AskUserQuestion tool to prompt the user:
+
+**Question:** "Would you like to install the OMC CLI globally for standalone analytics? (`omc stats`, `omc agents`, `omc tui`)"
+
+**Options:**
+1. **Yes (Recommended)** - Install `oh-my-claude-sisyphus` via `npm install -g`
+2. **No - Skip** - Skip installation (can install manually later with `npm install -g oh-my-claude-sisyphus`)
+
+If user chooses **Yes**:
+
+```bash
+# Check if npm is available
+if ! command -v npm &>/dev/null; then
+  echo "WARNING: npm not found. Cannot install OMC CLI automatically."
+  echo "Install Node.js/npm first, then run: npm install -g oh-my-claude-sisyphus"
+else
+  # Install the CLI globally
+  if npm install -g oh-my-claude-sisyphus 2>&1; then
+    echo "OMC CLI installed successfully."
+    # Verify installation
+    if command -v omc &>/dev/null; then
+      OMC_CLI_VERSION=$(omc --version 2>/dev/null | head -1 || echo "installed")
+      echo "Verified: omc $OMC_CLI_VERSION"
     else
-      echo "WARNING: Failed to install OMC CLI (permission issue or network error)."
-      echo "You can install manually later: npm install -g oh-my-claude-sisyphus"
-      echo "Or with sudo: sudo npm install -g oh-my-claude-sisyphus"
+      echo "Installed but 'omc' not on PATH. You may need to restart your shell."
     fi
+  else
+    echo "WARNING: Failed to install OMC CLI (permission issue or network error)."
+    echo "You can install manually later: npm install -g oh-my-claude-sisyphus"
+    echo "Or with sudo: sudo npm install -g oh-my-claude-sisyphus"
   fi
 fi
 ```
+
+If user chooses **No - Skip**, continue to the next step without installing.
 
 **Note**: The CLI is optional. All core functionality is also available through the plugin system (`/oh-my-claudecode:omc-help`, `/oh-my-claudecode:omc-doctor`). The CLI adds standalone terminal commands for analytics outside of Claude Code sessions.
 
