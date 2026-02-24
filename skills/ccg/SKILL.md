@@ -89,7 +89,7 @@ mcp__team__omc_run_team_wait({
 Returns when done:
 ```json
 {
-  "status": "completed|failed|timeout",
+  "status": "completed|failed",
   "result": {
     "taskResults": [
       {"taskId": "1", "status": "completed", "summary": "..."},

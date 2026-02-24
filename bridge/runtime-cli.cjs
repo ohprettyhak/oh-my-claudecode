@@ -1136,12 +1136,10 @@ async function main() {
     agentTypes,
     tasks,
     cwd,
-    timeoutSeconds = 0,
     pollIntervalMs = 5e3
   } = input;
   const workerCount = input.workerCount ?? agentTypes.length;
   const stateRoot2 = (0, import_path6.join)(cwd, `.omc/state/team/${teamName}`);
-  const timeoutMs = timeoutSeconds * 1e3;
   const config = {
     teamName,
     workerCount,
@@ -1150,10 +1148,10 @@ async function main() {
     cwd
   };
   let runtime = null;
-  let finalStatus = "timeout";
+  let finalStatus = "failed";
   let pollActive = true;
   function exitCodeFor(status) {
-    return status === "completed" ? 0 : status === "timeout" ? 2 : 1;
+    return status === "completed" ? 0 : 1;
   }
   async function doShutdown(status) {
     pollActive = false;
@@ -1210,14 +1208,7 @@ async function main() {
     process.stderr.write(`[runtime-cli] Failed to persist pane IDs: ${err}
 `);
   }
-  const deadline = timeoutSeconds > 0 ? Date.now() + timeoutMs : Infinity;
   while (pollActive) {
-    if (Date.now() > deadline) {
-      process.stderr.write(`[runtime-cli] Timeout after ${timeoutSeconds}s
-`);
-      await doShutdown("timeout");
-      return;
-    }
     await new Promise((r) => setTimeout(r, pollIntervalMs));
     if (!pollActive) break;
     let snap;

@@ -5,7 +5,7 @@
  * - killWorkerPanes: leader-pane guard, empty no-op, shutdown sentinel write
  * - killTeamSession: never kill-session on split-pane (':'), leader-pane skip
  * - validateJobId regex logic (inline, since function is internal to team-server.ts)
- * - exit-code mapping: exitCodeFor logic
+ * - exit-code mapping: runtime-cli exitCodeFor logic (no dedicated timeout exit code)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { tmpdir } from 'os';
@@ -163,16 +163,21 @@ describe('team start validation wiring', () => {
         expect(source).toContain("import { validateTeamName } from '../team/team-name.js'");
         expect(source).toContain('validateTeamName(input.teamName);');
     });
+    it('contains timeoutSeconds deprecation guard in omc_run_team_start', () => {
+        const source = readFileSync(join(__dirname, '..', 'team-server.ts'), 'utf-8');
+        expect(source).toContain("hasOwnProperty.call(args, 'timeoutSeconds')");
+        expect(source).toContain('no longer accepts timeoutSeconds');
+    });
 });
 // ─── exit code mapping ────────────────────────────────────────────────────────
 // Re-test the exitCodeFor logic from runtime-cli.ts (spec from Step 8)
 function exitCodeFor(status) {
-    return status === 'completed' ? 0 : status === 'timeout' ? 2 : 1;
+    return status === 'completed' ? 0 : 1;
 }
 describe('exitCodeFor (runtime-cli doShutdown exit codes)', () => {
     it('returns 0 for completed', () => expect(exitCodeFor('completed')).toBe(0));
     it('returns 1 for failed', () => expect(exitCodeFor('failed')).toBe(1));
-    it('returns 2 for timeout', () => expect(exitCodeFor('timeout')).toBe(2));
+    it('returns 1 for timeout (no dedicated timeout exit code)', () => expect(exitCodeFor('timeout')).toBe(1));
     it('returns 1 for unknown status', () => expect(exitCodeFor('unknown')).toBe(1));
 });
 //# sourceMappingURL=team-cleanup.test.js.map

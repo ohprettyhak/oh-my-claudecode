@@ -17836,8 +17836,7 @@ var startSchema = external_exports.object({
     subject: external_exports.string().describe("Brief task title"),
     description: external_exports.string().describe("Full task description")
   })).describe("Tasks to distribute to workers"),
-  cwd: external_exports.string().describe("Working directory (absolute path)"),
-  timeoutSeconds: external_exports.number().optional().describe("Optional runtime timeout in seconds (default: 0 = no implicit runtime timeout; set explicitly to enforce one)")
+  cwd: external_exports.string().describe("Working directory (absolute path)")
 });
 var statusSchema = external_exports.object({
   job_id: external_exports.string().describe("Job ID returned by omc_run_team_start")
@@ -17847,6 +17846,11 @@ var waitSchema = external_exports.object({
   timeout_ms: external_exports.number().optional().describe("Maximum wait time in ms (default: 300000, max: 3600000)")
 });
 async function handleStart(args) {
+  if (typeof args === "object" && args !== null && Object.prototype.hasOwnProperty.call(args, "timeoutSeconds")) {
+    throw new Error(
+      "omc_run_team_start no longer accepts timeoutSeconds. Remove timeoutSeconds and use omc_run_team_wait timeout_ms to limit the wait call only (workers keep running until completion or explicit omc_run_team_cleanup)."
+    );
+  }
   const input = startSchema.parse(args);
   validateTeamName(input.teamName);
   const jobId = `omc-${Date.now().toString(36)}`;
@@ -17873,7 +17877,7 @@ async function handleStart(args) {
         const parsed = JSON.parse(stdout);
         const s = parsed.status;
         if (job.status === "running") {
-          job.status = s === "completed" || s === "failed" || s === "timeout" ? s : "failed";
+          job.status = s === "completed" || s === "failed" ? s : "failed";
         }
       } catch {
         if (job.status === "running") job.status = "failed";
@@ -17882,7 +17886,6 @@ async function handleStart(args) {
     }
     if (job.status === "running") {
       if (code === 0) job.status = "completed";
-      else if (code === 2) job.status = "timeout";
       else job.status = "failed";
     }
     if (stderr) job.stderr = stderr;
@@ -17979,8 +17982,7 @@ var TOOLS = [
           },
           description: "Tasks to distribute to workers"
         },
-        cwd: { type: "string", description: "Working directory (absolute path)" },
-        timeoutSeconds: { type: "number", description: "Optional runtime timeout in seconds (default: 0 = no implicit runtime timeout; set explicitly to enforce one)" }
+        cwd: { type: "string", description: "Working directory (absolute path)" }
       },
       required: ["teamName", "agentTypes", "tasks", "cwd"]
     }
@@ -17998,7 +18000,7 @@ var TOOLS = [
   },
   {
     name: "omc_run_team_wait",
-    description: "Block (poll internally) until a background omc_run_team job reaches a terminal state (completed, failed, timeout). Returns the result when done. One call instead of N polling calls. Uses exponential backoff (500ms \u2192 2000ms). On timeout, workers are left running \u2014 call omc_run_team_wait again to keep waiting, or omc_run_team_cleanup to stop them explicitly.",
+    description: "Block (poll internally) until a background omc_run_team job reaches a terminal state (completed or failed). Returns the result when done. One call instead of N polling calls. Uses exponential backoff (500ms \u2192 2000ms). If this wait call times out, workers are left running \u2014 call omc_run_team_wait again to keep waiting, or omc_run_team_cleanup to stop them explicitly.",
     inputSchema: {
       type: "object",
       properties: {
@@ -18010,7 +18012,7 @@ var TOOLS = [
   },
   {
     name: "omc_run_team_cleanup",
-    description: "Explicitly clean up worker panes for a completed or timed-out team job. Kills all worker panes recorded for the job without touching the leader pane or the user session.",
+    description: "Explicitly clean up worker panes when you want to stop workers. Kills all worker panes recorded for the job without touching the leader pane or the user session.",
     inputSchema: {
       type: "object",
       properties: {

@@ -115,7 +115,7 @@ Returns when done:
 ```json
 {
   "jobId": "omc-...",
-  "status": "completed|failed|timeout",
+  "status": "completed|failed",
   "elapsedSeconds": "95.3",
   "result": {
     "status": "completed",
@@ -139,7 +139,7 @@ Returns when done:
 > If you need non-blocking checks (e.g. to do other work while waiting), use
 > `mcp__team__omc_run_team_status` instead.
 
-Report results to the user. For `failed` or `timeout`, explain what happened and suggest next steps (reduce scope, check CLI installation, verify tmux is running).
+Report results to the user. For `failed` or wait-timeout errors, explain what happened and suggest next steps (reduce scope, check CLI installation, verify tmux is running).
 
 Update OMC state:
 ```
@@ -155,7 +155,7 @@ state_write(mode="team", current_phase="completed", active=false)
 | `not inside tmux` | Shell not running inside a tmux session | Start tmux and rerun |
 | `codex: command not found` | Codex CLI not installed | `npm install -g @openai/codex` |
 | `gemini: command not found` | Gemini CLI not installed | `npm install -g @google/gemini-cli` |
-| `status: timeout` | Explicit runtime timeout (`timeoutSeconds`) was reached | Increase explicit `timeoutSeconds` or remove it to run without runtime timeout; note `wait timeout_ms` only ends the wait call and does not stop workers |
+| wait timeout error | `omc_run_team_wait` hit `timeout_ms` before completion | Call `omc_run_team_wait` again to keep waiting, or call `omc_run_team_cleanup` to explicitly stop worker panes |
 | `status: failed` | All workers exited with work remaining | Check stderr for crash details |
 
 ---

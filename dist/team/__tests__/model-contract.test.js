@@ -26,9 +26,9 @@ describe('model-contract', () => {
             const args = buildLaunchArgs('claude', { teamName: 't', workerName: 'w', cwd: '/tmp' });
             expect(args).toContain('--dangerously-skip-permissions');
         });
-        it('codex includes --full-auto and bypass approvals/sandbox', () => {
+        it('codex includes --dangerously-bypass-approvals-and-sandbox', () => {
             const args = buildLaunchArgs('codex', { teamName: 't', workerName: 'w', cwd: '/tmp' });
-            expect(args).toContain('--full-auto');
+            expect(args).not.toContain('--full-auto');
             expect(args).toContain('--dangerously-bypass-approvals-and-sandbox');
         });
         it('gemini includes --yolo', () => {
@@ -56,7 +56,6 @@ describe('model-contract', () => {
         it('builds binary + args', () => {
             expect(buildWorkerArgv('codex', { teamName: 'my-team', workerName: 'worker-1', cwd: '/tmp' })).toEqual([
                 'codex',
-                '--full-auto',
                 '--dangerously-bypass-approvals-and-sandbox',
             ]);
         });
