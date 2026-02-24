@@ -482,11 +482,13 @@ pipeline: analyze → fix → test this bug
 
 | Platform | Install Method | Hook Type |
 |----------|---------------|-----------|
-| **Windows** | `npm install -g` | Node.js (.mjs) |
+| **Windows** | WSL2 recommended (see note) | Node.js (.mjs) |
 | **macOS** | curl or npm | Bash (.sh) |
 | **Linux** | curl or npm | Bash (.sh) |
 
 > **Note**: Bash hooks are fully portable across macOS and Linux (no GNU-specific dependencies).
+
+> **Windows**: Native Windows (win32) support is experimental. OMC requires tmux, which is not available on native Windows. **WSL2 is strongly recommended** for Windows users. See the [WSL2 installation guide](https://learn.microsoft.com/en-us/windows/wsl/install). Native Windows issues may have limited support.
 
 > **Advanced**: Set `OMC_USE_NODE_HOOKS=1` to use Node.js hooks on macOS/Linux.
 
