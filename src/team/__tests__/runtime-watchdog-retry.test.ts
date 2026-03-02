@@ -13,59 +13,12 @@ const tmuxMocks = vi.hoisted(() => ({
   sendToWorker: vi.fn(),
 }));
 
-vi.mock('../tmux-session.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../tmux-session.js')>();
-  return {
-    ...actual,
-    isWorkerAlive: tmuxMocks.isWorkerAlive,
-    spawnWorkerInPane: tmuxMocks.spawnWorkerInPane,
-    sendToWorker: tmuxMocks.sendToWorker,
-  };
-});
-
-vi.mock('../model-contract.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../model-contract.js')>();
-  return {
-    ...actual,
-    buildWorkerArgv: vi.fn(() => ['codex']),
-    getWorkerEnv: vi.fn(() => ({})),
-    isPromptModeAgent: vi.fn(() => true),
-    getPromptModeArgs: vi.fn(() => ['-p', 'stub prompt']),
-  };
-});
-
-vi.mock('child_process', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('child_process')>();
-  const { promisify: utilPromisify } = await import('util');
-
-  function mockExecFile(
-    _cmd: string,
-    args: string[],
-    cb: (error: Error | null, stdout: string, stderr: string) => void
-  ) {
-    if (args[0] === 'split-window') {
-      cb(null, '%42\n', '');
-      return {} as never;
-    }
-    cb(null, '', '');
-    return {} as never;
-  }
-
-  (mockExecFile as unknown as { [utilPromisify.custom]: unknown })[utilPromisify.custom] = async (
-    _cmd: string,
-    args: string[]
-  ) => {
-    if (args[0] === 'split-window') {
-      return { stdout: '%42\n', stderr: '' };
-    }
-    return { stdout: '', stderr: '' };
-  };
-
-  return {
-    ...actual,
-    execFile: mockExecFile,
-  };
-});
+const modelContractMocks = vi.hoisted(() => ({
+  buildWorkerArgv: vi.fn(() => ['codex']),
+  getWorkerEnv: vi.fn(() => ({})),
+  isPromptModeAgent: vi.fn(() => true),
+  getPromptModeArgs: vi.fn(() => ['-p', 'stub prompt']),
+}));
 
 function makeRuntime(cwd: string, teamName: string): TeamRuntime {
   return {
@@ -151,6 +104,9 @@ describe('watchdogCliWorkers dead-pane retry behavior', { timeout: 10000 }, () =
   beforeEach(async () => {
     vi.useRealTimers();
     vi.resetModules();
+    vi.doUnmock('../tmux-session.js');
+    vi.doUnmock('../model-contract.js');
+    vi.doUnmock('child_process');
     cwd = mkdtempSync(join(tmpdir(), 'runtime-watchdog-retry-'));
     tmuxMocks.isWorkerAlive.mockReset();
     tmuxMocks.spawnWorkerInPane.mockReset();
@@ -158,12 +114,76 @@ describe('watchdogCliWorkers dead-pane retry behavior', { timeout: 10000 }, () =
     tmuxMocks.isWorkerAlive.mockResolvedValue(false);
     tmuxMocks.spawnWorkerInPane.mockResolvedValue(undefined);
     tmuxMocks.sendToWorker.mockResolvedValue(true);
+    modelContractMocks.buildWorkerArgv.mockReset();
+    modelContractMocks.getWorkerEnv.mockReset();
+    modelContractMocks.isPromptModeAgent.mockReset();
+    modelContractMocks.getPromptModeArgs.mockReset();
+    modelContractMocks.buildWorkerArgv.mockReturnValue(['codex']);
+    modelContractMocks.getWorkerEnv.mockReturnValue({});
+    modelContractMocks.isPromptModeAgent.mockReturnValue(true);
+    modelContractMocks.getPromptModeArgs.mockReturnValue(['-p', 'stub prompt']);
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    vi.doMock('../tmux-session.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../tmux-session.js')>();
+      return {
+        ...actual,
+        isWorkerAlive: tmuxMocks.isWorkerAlive,
+        spawnWorkerInPane: tmuxMocks.spawnWorkerInPane,
+        sendToWorker: tmuxMocks.sendToWorker,
+      };
+    });
+
+    vi.doMock('../model-contract.js', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('../model-contract.js')>();
+      return {
+        ...actual,
+        buildWorkerArgv: modelContractMocks.buildWorkerArgv,
+        getWorkerEnv: modelContractMocks.getWorkerEnv,
+        isPromptModeAgent: modelContractMocks.isPromptModeAgent,
+        getPromptModeArgs: modelContractMocks.getPromptModeArgs,
+      };
+    });
+
+    vi.doMock('child_process', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('child_process')>();
+      const { promisify: utilPromisify } = await import('util');
+
+      function mockExecFile(
+        _cmd: string,
+        args: string[],
+        cb: (error: Error | null, stdout: string, stderr: string) => void
+      ) {
+        if (args[0] === 'split-window') {
+          cb(null, '%42\n', '');
+          return {} as never;
+        }
+        cb(null, '', '');
+        return {} as never;
+      }
+
+      (mockExecFile as unknown as { [utilPromisify.custom]: unknown })[utilPromisify.custom] = async (
+        _cmd: string,
+        args: string[]
+      ) => {
+        if (args[0] === 'split-window') {
+          return { stdout: '%42\n', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      };
+
+      return {
+        ...actual,
+        execFile: mockExecFile,
+      };
+    });
+
     setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation(
-      ((handler: TimerHandler, _timeout?: number, ...args: unknown[]) => {
-        void Promise.resolve().then(async () => {
+      ((handler: Parameters<typeof setInterval>[0], _timeout?: number, ...args: unknown[]) => {
+        void Promise.resolve().then(() => {
           if (typeof handler === 'function') {
-            await handler(...args);
+            const intervalHandler = handler as (...cbArgs: unknown[]) => void | Promise<void>;
+            void intervalHandler(...args);
           }
         });
         return 1 as unknown as ReturnType<typeof setInterval>;
@@ -177,6 +197,9 @@ describe('watchdogCliWorkers dead-pane retry behavior', { timeout: 10000 }, () =
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.doUnmock('../tmux-session.js');
+    vi.doUnmock('../model-contract.js');
+    vi.doUnmock('child_process');
     setIntervalSpy.mockRestore();
     clearIntervalSpy.mockRestore();
     warnSpy.mockRestore();
