@@ -8,8 +8,8 @@
  */
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
-import * as jsonc from 'jsonc-parser';
 import { getConfigDir } from '../utils/paths.js';
+import { parseJsonc } from '../utils/jsonc.js';
 import { getDefaultModelHigh, getDefaultModelMedium, getDefaultModelLow, isNonClaudeProvider, } from './models.js';
 /**
  * Default configuration.
@@ -150,14 +150,7 @@ export function loadJsoncFile(path) {
     }
     try {
         const content = readFileSync(path, 'utf-8');
-        const errors = [];
-        const result = jsonc.parse(content, errors, {
-            allowTrailingComma: true,
-            allowEmptyContent: true
-        });
-        if (errors.length > 0) {
-            console.warn(`Warning: Parse errors in ${path}:`, errors);
-        }
+        const result = parseJsonc(content);
         return result;
     }
     catch (error) {

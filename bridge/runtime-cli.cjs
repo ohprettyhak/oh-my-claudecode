@@ -720,18 +720,16 @@ var import_url = require("url");
 // src/agents/prompt-helpers.ts
 var import_meta = {};
 function getPackageDir() {
-  try {
-    if (import_meta?.url) {
-      const __filename = (0, import_url2.fileURLToPath)(import_meta.url);
-      const __dirname2 = (0, import_path4.dirname)(__filename);
-      return (0, import_path4.join)(__dirname2, "..", "..");
-    }
-  } catch {
-  }
   if (typeof __dirname !== "undefined") {
     return (0, import_path4.join)(__dirname, "..");
   }
-  return process.cwd();
+  try {
+    const __filename = (0, import_url2.fileURLToPath)(import_meta.url);
+    const __dirname2 = (0, import_path4.dirname)(__filename);
+    return (0, import_path4.join)(__dirname2, "..", "..");
+  } catch {
+    return process.cwd();
+  }
 }
 var _cachedRoles = null;
 function getValidAgentRoles() {
@@ -1766,7 +1764,52 @@ var import_os2 = require("os");
 // src/config/loader.ts
 var import_fs8 = require("fs");
 var import_path12 = require("path");
-var jsonc = __toESM(require("jsonc-parser"), 1);
+
+// src/utils/jsonc.ts
+function parseJsonc(content) {
+  const cleaned = stripJsoncComments(content);
+  return JSON.parse(cleaned);
+}
+function stripJsoncComments(content) {
+  let result = "";
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] === "/" && content[i + 1] === "/") {
+      while (i < content.length && content[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+    if (content[i] === "/" && content[i + 1] === "*") {
+      i += 2;
+      while (i < content.length && !(content[i] === "*" && content[i + 1] === "/")) {
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+    if (content[i] === '"') {
+      result += content[i];
+      i++;
+      while (i < content.length && content[i] !== '"') {
+        if (content[i] === "\\" && content[i + 1] === '"') {
+          result += content[i];
+          i++;
+        }
+        result += content[i];
+        i++;
+      }
+      if (i < content.length) {
+        result += content[i];
+        i++;
+      }
+      continue;
+    }
+    result += content[i];
+    i++;
+  }
+  return result;
+}
 
 // src/utils/ssrf-guard.ts
 var BLOCKED_HOST_PATTERNS = [
@@ -2051,14 +2094,7 @@ function loadJsoncFile(path) {
   }
   try {
     const content = (0, import_fs8.readFileSync)(path, "utf-8");
-    const errors = [];
-    const result = jsonc.parse(content, errors, {
-      allowTrailingComma: true,
-      allowEmptyContent: true
-    });
-    if (errors.length > 0) {
-      console.warn(`Warning: Parse errors in ${path}:`, errors);
-    }
+    const result = parseJsonc(content);
     return result;
   } catch (error) {
     console.error(`Error loading config from ${path}:`, error);

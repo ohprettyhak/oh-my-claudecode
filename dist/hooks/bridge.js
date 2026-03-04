@@ -1144,8 +1144,19 @@ export async function main() {
     // Write output to stdout
     console.log(JSON.stringify(output));
 }
-// Run if called directly
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Run if called directly (works in both ESM and bundled CJS)
+// In CJS bundle, check if this is the main module by comparing with process.argv[1]
+// In ESM, we can use import.meta.url comparison
+function isMainModule() {
+    try {
+        return import.meta.url === pathToFileURL(process.argv[1]).href;
+    }
+    catch {
+        // In CJS bundle, always run main() when loaded directly
+        return true;
+    }
+}
+if (isMainModule()) {
     main().catch((err) => {
         console.error("[hook-bridge] Fatal error:", err);
         process.exit(1);

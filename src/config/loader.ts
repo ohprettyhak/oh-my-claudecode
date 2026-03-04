@@ -9,9 +9,9 @@
 
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
-import * as jsonc from 'jsonc-parser';
 import type { PluginConfig, ExternalModelsConfig } from '../shared/types.js';
 import { getConfigDir } from '../utils/paths.js';
+import { parseJsonc } from '../utils/jsonc.js';
 import {
   getDefaultModelHigh,
   getDefaultModelMedium,
@@ -164,16 +164,7 @@ export function loadJsoncFile(path: string): PluginConfig | null {
 
   try {
     const content = readFileSync(path, 'utf-8');
-    const errors: jsonc.ParseError[] = [];
-    const result = jsonc.parse(content, errors, {
-      allowTrailingComma: true,
-      allowEmptyContent: true
-    });
-
-    if (errors.length > 0) {
-      console.warn(`Warning: Parse errors in ${path}:`, errors);
-    }
-
+    const result = parseJsonc(content);
     return result as PluginConfig;
   } catch (error) {
     console.error(`Error loading config from ${path}:`, error);

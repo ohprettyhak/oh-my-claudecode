@@ -15,25 +15,22 @@ import { loadAgentPrompt } from './utils.js';
  * fall back to __dirname which is natively available in CJS.
  */
 function getPackageDir() {
-    try {
-        // ESM path (works in dev via ts/dist)
-        if (import.meta?.url) {
-            const __filename = fileURLToPath(import.meta.url);
-            const __dirname = dirname(__filename);
-            // From src/mcp/ or dist/mcp/ go up to package root
-            return join(__dirname, '..', '..');
-        }
-    }
-    catch {
-        // import.meta.url unavailable — fall through to CJS path
-    }
-    // CJS bundle path: __dirname is available natively in CJS.
+    // CJS bundle path (bridge/cli.cjs): __dirname is available natively in CJS.
     // From bridge/ go up 1 level to package root.
     if (typeof __dirname !== 'undefined') {
         return join(__dirname, '..');
     }
-    // Last resort: use process.cwd()
-    return process.cwd();
+    // ESM path (works in dev via ts/dist)
+    try {
+        const __filename = fileURLToPath(import.meta.url);
+        const __dirname = dirname(__filename);
+        // From src/mcp/ or dist/mcp/ go up to package root
+        return join(__dirname, '..', '..');
+    }
+    catch {
+        // import.meta.url unavailable — last resort
+        return process.cwd();
+    }
 }
 /**
  * Agent role name validation regex.

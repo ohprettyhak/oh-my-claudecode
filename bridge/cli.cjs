@@ -3159,6 +3159,57 @@ var init_paths = __esm({
   }
 });
 
+// src/utils/jsonc.ts
+function parseJsonc(content) {
+  const cleaned = stripJsoncComments(content);
+  return JSON.parse(cleaned);
+}
+function stripJsoncComments(content) {
+  let result = "";
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] === "/" && content[i + 1] === "/") {
+      while (i < content.length && content[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+    if (content[i] === "/" && content[i + 1] === "*") {
+      i += 2;
+      while (i < content.length && !(content[i] === "*" && content[i + 1] === "/")) {
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+    if (content[i] === '"') {
+      result += content[i];
+      i++;
+      while (i < content.length && content[i] !== '"') {
+        if (content[i] === "\\" && content[i + 1] === '"') {
+          result += content[i];
+          i++;
+        }
+        result += content[i];
+        i++;
+      }
+      if (i < content.length) {
+        result += content[i];
+        i++;
+      }
+      continue;
+    }
+    result += content[i];
+    i++;
+  }
+  return result;
+}
+var init_jsonc = __esm({
+  "src/utils/jsonc.ts"() {
+    "use strict";
+  }
+});
+
 // src/utils/ssrf-guard.ts
 function validateUrlForSSRF(urlString) {
   if (!urlString || typeof urlString !== "string") {
@@ -3337,14 +3388,7 @@ function loadJsoncFile(path20) {
   }
   try {
     const content = (0, import_fs2.readFileSync)(path20, "utf-8");
-    const errors = [];
-    const result = jsonc.parse(content, errors, {
-      allowTrailingComma: true,
-      allowEmptyContent: true
-    });
-    if (errors.length > 0) {
-      console.warn(`Warning: Parse errors in ${path20}:`, errors);
-    }
+    const result = parseJsonc(content);
     return result;
   } catch (error2) {
     console.error(`Error loading config from ${path20}:`, error2);
@@ -3815,14 +3859,14 @@ function generateConfigSchema() {
     }
   };
 }
-var import_fs2, import_path2, jsonc, DEFAULT_CONFIG;
+var import_fs2, import_path2, DEFAULT_CONFIG;
 var init_loader = __esm({
   "src/config/loader.ts"() {
     "use strict";
     import_fs2 = require("fs");
     import_path2 = require("path");
-    jsonc = __toESM(require("jsonc-parser"), 1);
     init_paths();
+    init_jsonc();
     init_models();
     DEFAULT_CONFIG = {
       agents: {
@@ -5985,18 +6029,16 @@ var init_session_replay = __esm({
 
 // src/installer/hooks.ts
 function getPackageDir2() {
-  try {
-    if (importMetaUrl) {
-      const __filename5 = (0, import_url6.fileURLToPath)(importMetaUrl);
-      const __dirname4 = (0, import_path33.dirname)(__filename5);
-      return (0, import_path33.join)(__dirname4, "..", "..");
-    }
-  } catch {
-  }
   if (typeof __dirname !== "undefined") {
     return (0, import_path33.join)(__dirname, "..");
   }
-  return process.cwd();
+  try {
+    const __filename5 = (0, import_url6.fileURLToPath)(importMetaUrl);
+    const __dirname4 = (0, import_path33.dirname)(__filename5);
+    return (0, import_path33.join)(__dirname4, "..", "..");
+  } catch {
+    return process.cwd();
+  }
 }
 function loadTemplate(filename) {
   const templatePath = (0, import_path33.join)(getPackageDir2(), "templates", "hooks", filename);
@@ -6450,18 +6492,16 @@ function isProjectScopedPlugin() {
   return !normalizedPluginRoot.startsWith(normalizedGlobalBase);
 }
 function getPackageDir3() {
-  try {
-    if (importMetaUrl) {
-      const __filename5 = (0, import_url8.fileURLToPath)(importMetaUrl);
-      const __dirname4 = (0, import_path36.dirname)(__filename5);
-      return (0, import_path36.join)(__dirname4, "..", "..");
-    }
-  } catch {
-  }
   if (typeof __dirname !== "undefined") {
     return (0, import_path36.join)(__dirname, "..");
   }
-  return process.cwd();
+  try {
+    const __filename5 = (0, import_url8.fileURLToPath)(importMetaUrl);
+    const __dirname4 = (0, import_path36.dirname)(__filename5);
+    return (0, import_path36.join)(__dirname4, "..", "..");
+  } catch {
+    return process.cwd();
+  }
 }
 function loadAgentDefinitions() {
   const agentsDir = (0, import_path36.join)(getPackageDir3(), "agents");
@@ -22340,18 +22380,16 @@ var import_fs3 = require("fs");
 var import_path3 = require("path");
 var import_url = require("url");
 function getPackageDir() {
-  try {
-    if (importMetaUrl) {
-      const __filename5 = (0, import_url.fileURLToPath)(importMetaUrl);
-      const __dirname4 = (0, import_path3.dirname)(__filename5);
-      return (0, import_path3.join)(__dirname4, "..", "..");
-    }
-  } catch {
-  }
   if (typeof __dirname !== "undefined") {
     return (0, import_path3.join)(__dirname, "..");
   }
-  return process.cwd();
+  try {
+    const __filename5 = (0, import_url.fileURLToPath)(importMetaUrl);
+    const __dirname4 = (0, import_path3.dirname)(__filename5);
+    return (0, import_path3.join)(__dirname4, "..", "..");
+  } catch {
+    return process.cwd();
+  }
 }
 function stripFrontmatter(content) {
   const match = content.match(/^---[\s\S]*?---\s*([\s\S]*)$/);
@@ -34704,7 +34742,7 @@ var _parse = (_Err) => (schema, value, _ctx, _params) => {
   }
   return result.value;
 };
-var parse2 = /* @__PURE__ */ _parse($ZodRealError);
+var parse = /* @__PURE__ */ _parse($ZodRealError);
 var _parseAsync = (_Err) => async (schema, value, _ctx, params) => {
   const ctx = _ctx ? Object.assign(_ctx, { async: true }) : { async: true };
   let result = schema._zod.run({ value, issues: [] }, ctx);
@@ -37781,7 +37819,7 @@ var ZodMiniType = /* @__PURE__ */ $constructor("ZodMiniType", (inst, def) => {
     throw new Error("Uninitialized schema in ZodMiniType.");
   $ZodType.init(inst, def);
   inst.def = def;
-  inst.parse = (data, params) => parse2(inst, data, params, { callee: inst.parse });
+  inst.parse = (data, params) => parse(inst, data, params, { callee: inst.parse });
   inst.safeParse = (data, params) => safeParse(inst, data, params);
   inst.parseAsync = async (data, params) => parseAsync(inst, data, params, { callee: inst.parseAsync });
   inst.safeParseAsync = async (data, params) => safeParseAsync(inst, data, params);
@@ -55143,18 +55181,16 @@ var import_fs42 = require("fs");
 var import_path46 = require("path");
 var import_url9 = require("url");
 function getPackageDir4() {
-  try {
-    if (importMetaUrl) {
-      const __filename5 = (0, import_url9.fileURLToPath)(importMetaUrl);
-      const __dirname4 = (0, import_path46.dirname)(__filename5);
-      return (0, import_path46.join)(__dirname4, "..", "..");
-    }
-  } catch {
-  }
   if (typeof __dirname !== "undefined") {
     return (0, import_path46.join)(__dirname, "..");
   }
-  return process.cwd();
+  try {
+    const __filename5 = (0, import_url9.fileURLToPath)(importMetaUrl);
+    const __dirname4 = (0, import_path46.dirname)(__filename5);
+    return (0, import_path46.join)(__dirname4, "..", "..");
+  } catch {
+    return process.cwd();
+  }
 }
 var _cachedRoles = null;
 function getValidAgentRoles() {
@@ -56132,7 +56168,14 @@ async function main() {
   const output = await processHook(hookType, input);
   console.log(JSON.stringify(output));
 }
-if (importMetaUrl === (0, import_url11.pathToFileURL)(process.argv[1]).href) {
+function isMainModule() {
+  try {
+    return importMetaUrl === (0, import_url11.pathToFileURL)(process.argv[1]).href;
+  } catch {
+    return true;
+  }
+}
+if (isMainModule()) {
   main().catch((err) => {
     console.error("[hook-bridge] Fatal error:", err);
     process.exit(1);

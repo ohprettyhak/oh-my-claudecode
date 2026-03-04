@@ -1,3 +1,19 @@
+# oh-my-claudecode v4.6.5: Remove jsonc-parser Dependency
+
+## Release Notes
+
+Removed external `jsonc-parser` dependency by implementing a lightweight JSONC parser internally.
+
+### Bug Fixes
+
+- **Bundle jsonc-parser**: Replaced external `jsonc-parser` dependency with a custom implementation.
+  - Created `src/utils/jsonc.ts` with `parseJsonc()` and `stripJsoncComments()` functions
+  - Updated `src/config/loader.ts` to use the internal parser
+  - Removed `jsonc-parser` from external dependencies in `build-runtime-cli.mjs`
+  - Fixes #1316: `runtime-cli.cjs` failing with "Cannot find module 'jsonc-parser'" in plugin marketplace installs
+
+---
+
 # oh-my-claudecode v4.6.4: ESM/CJS Path Resolution Hotfix
 
 ## Release Notes
