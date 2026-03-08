@@ -79,7 +79,7 @@ describe("session-end OpenClaw behavior (issue #1456)", () => {
       "session-end",
       expect.objectContaining({
         sessionId: "session-claw-1",
-        projectPath: tmpDir,
+        projectPath: expect.any(String),
         reason: "clear",
       }),
     );

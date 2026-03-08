@@ -483,7 +483,7 @@ export async function processSessionEnd(input: SessionEndInput): Promise<HookOut
       const { wakeOpenClaw } = await import('../../openclaw/index.js');
       await wakeOpenClaw('session-end', {
         sessionId: input.session_id,
-        projectPath: input.cwd,
+        projectPath: directory,
         reason: input.reason,
       });
     }
