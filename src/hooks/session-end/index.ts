@@ -477,7 +477,7 @@ export async function processSessionEnd(input: SessionEndInput): Promise<HookOut
     // Notification failures should never block session end
   }
 
-  // Wake OpenClaw gateway for session-end (non-blocking, fire-and-forget)
+  // Wake OpenClaw gateway for session-end (blocking but error-tolerant)
   try {
     if (process.env.OMC_OPENCLAW === '1') {
       const { wakeOpenClaw } = await import('../../openclaw/index.js');

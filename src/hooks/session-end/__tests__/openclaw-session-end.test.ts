@@ -28,7 +28,7 @@ import { processSessionEnd } from "../index.js";
 import { wakeOpenClaw } from "../../../openclaw/index.js";
 import { notify } from "../../../notifications/index.js";
 
-describe("session-end OpenClaw behavior (issue #1120)", () => {
+describe("session-end OpenClaw behavior (issue #1456)", () => {
   let tmpDir: string;
   let transcriptPath: string;
 
@@ -49,6 +49,7 @@ describe("session-end OpenClaw behavior (issue #1120)", () => {
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete process.env.OMC_OPENCLAW;
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
@@ -78,6 +79,7 @@ describe("session-end OpenClaw behavior (issue #1120)", () => {
       expect.objectContaining({
         sessionId: "session-claw-1",
         projectPath: tmpDir,
+        reason: "clear",
       }),
     );
   });
