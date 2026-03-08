@@ -485,7 +485,7 @@ export async function processSessionEnd(input: SessionEndInput): Promise<HookOut
         sessionId: input.session_id,
         projectPath: input.cwd,
         reason: input.reason,
-      }).catch(() => {});
+      });
     }
   } catch {
     // OpenClaw failures should never block session end

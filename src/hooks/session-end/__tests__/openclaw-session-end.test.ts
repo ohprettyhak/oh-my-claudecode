@@ -74,6 +74,7 @@ describe("session-end OpenClaw behavior (issue #1456)", () => {
         projectPath: tmpDir,
       }),
     );
+    expect(wakeOpenClaw).toHaveBeenCalledTimes(1);
     expect(wakeOpenClaw).toHaveBeenCalledWith(
       "session-end",
       expect.objectContaining({
