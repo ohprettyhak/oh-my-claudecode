@@ -53,7 +53,7 @@ describe("session-end OpenClaw behavior (issue #1120)", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not call wakeOpenClaw directly during session-end when OMC_OPENCLAW=1", async () => {
+  it("calls wakeOpenClaw during session-end when OMC_OPENCLAW=1", async () => {
     process.env.OMC_OPENCLAW = "1";
 
     await processSessionEnd({
@@ -65,9 +65,15 @@ describe("session-end OpenClaw behavior (issue #1120)", () => {
       reason: "clear",
     });
 
-    // Session-end dispatches the standard notification and does not directly call OpenClaw.
-    expect(wakeOpenClaw).not.toHaveBeenCalled();
+    // Session-end dispatches both the standard notification and an OpenClaw wake call.
     expect(notify).toHaveBeenCalledWith(
+      "session-end",
+      expect.objectContaining({
+        sessionId: "session-claw-1",
+        projectPath: tmpDir,
+      }),
+    );
+    expect(wakeOpenClaw).toHaveBeenCalledWith(
       "session-end",
       expect.objectContaining({
         sessionId: "session-claw-1",
@@ -95,7 +101,7 @@ describe("session-end OpenClaw behavior (issue #1120)", () => {
     process.env.OMC_OPENCLAW = "1";
     vi.mocked(wakeOpenClaw).mockRejectedValueOnce(new Error("gateway down"));
 
-    // Should not throw; wakeOpenClaw is not invoked from processSessionEnd.
+    // Should not throw; OpenClaw failures are swallowed and never block session end.
     await expect(
       processSessionEnd({
         session_id: "session-claw-3",

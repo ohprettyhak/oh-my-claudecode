@@ -477,6 +477,19 @@ export async function processSessionEnd(input: SessionEndInput): Promise<HookOut
     // Notification failures should never block session end
   }
 
+  // Wake OpenClaw gateway for session-end (non-blocking, fire-and-forget)
+  try {
+    if (process.env.OMC_OPENCLAW === '1') {
+      const { wakeOpenClaw } = await import('../../openclaw/index.js');
+      await wakeOpenClaw('session-end', {
+        sessionId: input.session_id,
+        projectPath: input.cwd,
+        reason: input.reason,
+      }).catch(() => {});
+    }
+  } catch {
+    // OpenClaw failures should never block session end
+  }
 
   // Clean up reply session registry and stop daemon if no active sessions remain
   try {
