@@ -130,11 +130,13 @@ export function isMinimaxHost(urlString: string): boolean {
 interface MinimaxModelRemain {
   model_name: string;
   current_interval_total_count: number;
+  /** Remaining requests in the current interval (NOT used count, despite the field name) */
   current_interval_usage_count: number;
   start_time: number;
   end_time: number;
   remains_time: number;
   current_weekly_total_count: number;
+  /** Remaining requests in the current week (NOT used count, despite the field name) */
   current_weekly_usage_count: number;
   weekly_start_time: number;
   weekly_end_time: number;
@@ -938,14 +940,16 @@ export function parseMinimaxResponse(response: MinimaxCodingPlanResponse): RateL
   }
 
   // Calculate interval usage percentage (avoid division by zero)
+  // Note: current_interval_usage_count is the REMAINING count, not used count
   const intervalTotal = codingModel.current_interval_total_count;
-  const intervalUsed = codingModel.current_interval_usage_count;
-  const intervalPercent = intervalTotal > 0 ? (intervalUsed / intervalTotal) * 100 : 0;
+  const intervalRemaining = codingModel.current_interval_usage_count;
+  const intervalPercent = intervalTotal > 0 ? ((intervalTotal - intervalRemaining) / intervalTotal) * 100 : 0;
 
   // Calculate weekly usage percentage
+  // Note: current_weekly_usage_count is the REMAINING count, not used count
   const weeklyTotal = codingModel.current_weekly_total_count;
-  const weeklyUsed = codingModel.current_weekly_usage_count;
-  const weeklyPercent = weeklyTotal > 0 ? (weeklyUsed / weeklyTotal) * 100 : 0;
+  const weeklyRemaining = codingModel.current_weekly_usage_count;
+  const weeklyPercent = weeklyTotal > 0 ? ((weeklyTotal - weeklyRemaining) / weeklyTotal) * 100 : 0;
 
   // Parse reset times from Unix ms timestamps
   const parseResetTime = (timestamp: number | undefined): Date | null => {

@@ -885,10 +885,10 @@ describe('parseMinimaxResponse', () => {
 
     const result = parseMinimaxResponse(response);
     expect(result).not.toBeNull();
-    // 1416/1500 * 100 = 94.4 (clamp does not round; rendering layer rounds)
-    expect(result!.fiveHourPercent).toBeCloseTo(94.4, 1);
-    // 14997/15000 * 100 = 99.98
-    expect(result!.weeklyPercent).toBeCloseTo(99.98, 1);
+    // (1500-1416)/1500 * 100 = 5.6 (usage_count is remaining, not used)
+    expect(result!.fiveHourPercent).toBeCloseTo(5.6, 1);
+    // (15000-14997)/15000 * 100 = 0.02
+    expect(result!.weeklyPercent).toBeCloseTo(0.02, 1);
     expect(result!.fiveHourResetsAt).toBeInstanceOf(Date);
     expect(result!.fiveHourResetsAt!.getTime()).toBe(endTime);
     expect(result!.weeklyResetsAt).toBeInstanceOf(Date);
@@ -1094,8 +1094,8 @@ describe('getUsage routing - minimax', () => {
     const result = await getUsage();
 
     expect(result.rateLimits).not.toBeNull();
-    expect(result.rateLimits!.fiveHourPercent).toBe(50); // 750/1500
-    expect(result.rateLimits!.weeklyPercent).toBe(20);   // 3000/15000
+    expect(result.rateLimits!.fiveHourPercent).toBe(50); // (1500-750)/1500
+    expect(result.rateLimits!.weeklyPercent).toBe(80);   // (15000-3000)/15000
     expect(result.rateLimits!.fiveHourResetsAt).toBeInstanceOf(Date);
     expect(result.rateLimits!.fiveHourResetsAt!.getTime()).toBe(endTime);
     expect(result.rateLimits!.weeklyResetsAt).toBeInstanceOf(Date);
